@@ -1,0 +1,36 @@
+
+apiVersion: v1
+kind: Deployment
+metadata:
+  name: ai-knowledge-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-knowledge-app
+  template:
+    metadata:
+      labels:
+        app: ai-knowledge-app
+    spec:
+      containers:
+      - name: ai-knowledge-app
+        image: yourregistry.azurecr.io/ai-knowledge-app:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: AZURE_SUBSCRIPTION_ID
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: subscription-id
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: client-id
+        - name: OPENAI_RESOURCE_GROUP
+          valueFrom:
+            secretKeyRef:
+              name: azure-secrets
+              key: openai-resource-group

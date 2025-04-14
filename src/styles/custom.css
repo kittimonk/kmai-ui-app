@@ -1,0 +1,102 @@
+
+/* Loading indicator for Chat */
+.dot-flashing {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #9880ff;
+  color: #9880ff;
+  animation: dot-flashing 1s infinite linear alternate;
+  animation-delay: 0.5s;
+}
+
+.dot-flashing::before, .dot-flashing::after {
+  content: '';
+  display: inline-block;
+  position: absolute;
+  top: 0;
+}
+
+.dot-flashing::before {
+  left: -15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #9880ff;
+  color: #9880ff;
+  animation: dot-flashing 1s infinite alternate;
+  animation-delay: 0s;
+}
+
+.dot-flashing::after {
+  left: 15px;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #9880ff;
+  color: #9880ff;
+  animation: dot-flashing 1s infinite alternate;
+  animation-delay: 1s;
+}
+
+@keyframes dot-flashing {
+  0% {
+    background-color: #9880ff;
+  }
+  50%, 100% {
+    background-color: rgba(152, 128, 255, 0.2);
+  }
+}
+
+/* Code editor styles */
+.code-editor {
+  font-family: 'Fira Code', monospace;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.code-editor-header {
+  background-color: #252526;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #333;
+}
+
+.code-editor-content {
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* Styling for scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Fix for Code component styling */
+@media (max-width: 768px) {
+  .lucide-icon {
+    width: 20px;
+    height: 20px;
+  }
+}
