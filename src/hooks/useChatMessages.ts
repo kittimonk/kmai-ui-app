@@ -111,6 +111,8 @@ export const useChatMessages = (apiError: string | null, isLoading: boolean, set
         responseContent = "I can help with code conversion and explanation. Use the Code Converter tool to transform code between different languages, or the Code Explainer to get detailed explanations of complex code snippets.";
       } else if (inputMessage.toLowerCase().includes('api')) {
         responseContent = "This chat interface connects to a FastAPI backend that provides various AI capabilities. For local development, make sure the API server is running on port 3000. Check the console for any connection issues.";
+      } else if (inputMessage.toLowerCase().includes('error') || inputMessage.toLowerCase().includes('issue')) {
+        responseContent = "I notice you're mentioning an error. In the Lovable preview environment, we're using mock responses instead of connecting to the actual FastAPI backend. For full functionality, you'll need to run the application locally with the FastAPI server running.";
       }
 
       const newBotMessage: Message = {

@@ -4,4 +4,5 @@ export type Message = {
   content: string;
   sender: 'user' | 'bot';
   timestamp: Date;
+  isStreaming?: boolean;
 };

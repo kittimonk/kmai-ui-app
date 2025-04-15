@@ -12,6 +12,7 @@ type ChatInputProps = {
 
 const ChatInput = ({ onSendMessage, isLoading, apiError, handleQuickQuestion, isInitialState }: ChatInputProps) => {
   const [inputValue, setInputValue] = useState('');
+  const isLovablePreview = window.location.hostname.includes('lovableproject.com') || window.location.hostname.includes('lovable.app');
 
   const handleSend = () => {
     if (inputValue.trim() === '') return;
@@ -26,6 +27,9 @@ const ChatInput = ({ onSendMessage, isLoading, apiError, handleQuickQuestion, is
     }
   };
 
+  // Only disable input if there's an API error and we're NOT in the Lovable preview
+  const isInputDisabled = apiError && !isLovablePreview;
+
   return (
     <div className="p-4 border-t border-gray-200 bg-white">
       <div className="flex items-center bg-gray-50 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500">
@@ -38,13 +42,13 @@ const ChatInput = ({ onSendMessage, isLoading, apiError, handleQuickQuestion, is
           placeholder="Ask a question..."
           rows={1}
           style={{ maxHeight: '120px' }}
-          disabled={!!apiError}
+          disabled={isInputDisabled}
         />
         <button
           onClick={handleSend}
-          disabled={inputValue.trim() === '' || isLoading || !!apiError}
+          disabled={inputValue.trim() === '' || isLoading || isInputDisabled}
           className={`p-3 ${
-            inputValue.trim() === '' || isLoading || !!apiError
+            inputValue.trim() === '' || isLoading || isInputDisabled
               ? 'text-gray-400' 
               : 'text-green-700 hover:text-green-800'
           }`}
@@ -53,9 +57,15 @@ const ChatInput = ({ onSendMessage, isLoading, apiError, handleQuickQuestion, is
         </button>
       </div>
       
-      {apiError && (
+      {apiError && !isLovablePreview && (
         <div className="mt-2 text-xs text-red-500">
           Chat is disabled due to API connection issues. Please check if the FastAPI server is running.
+        </div>
+      )}
+
+      {isLovablePreview && apiError && (
+        <div className="mt-2 text-xs text-amber-500">
+          Note: Running in preview mode with mock responses. For full functionality, run locally with the FastAPI server.
         </div>
       )}
 

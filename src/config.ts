@@ -1,3 +1,4 @@
+
 // API configuration
 
 // For local development, use your local FastAPI server
@@ -10,7 +11,7 @@ const AZURE_API_URL = '/api';
 const isAzureEnvironment = window.location.hostname.includes('azurewebsites.net');
 
 // For Lovable preview environment
-const isLovableEnvironment = window.location.hostname.includes('lovableproject.com');
+const isLovableEnvironment = window.location.hostname.includes('lovableproject.com') || window.location.hostname.includes('lovable.app');
 
 // Export the API base URL based on the environment
 export const API_BASE_URL = isAzureEnvironment ? 

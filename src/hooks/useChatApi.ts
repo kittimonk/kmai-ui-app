@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../config';
 export const useChatApi = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [isLovablePreview] = useState(window.location.hostname.includes('lovableproject.com'));
+  const [isLovablePreview] = useState(window.location.hostname.includes('lovableproject.com') || window.location.hostname.includes('lovable.app'));
 
   // Check API availability on hook mount
   useEffect(() => {
@@ -16,7 +16,8 @@ export const useChatApi = () => {
 
   const checkApiAvailability = async () => {
     if (isLovablePreview) {
-      // In Lovable preview, we'll simulate API availability
+      // In Lovable preview, we'll use mock responses instead of showing an error
+      console.log("Running in Lovable preview mode - using mock responses");
       setApiError(null);
       return;
     }
