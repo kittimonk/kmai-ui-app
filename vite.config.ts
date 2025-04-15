@@ -24,9 +24,9 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    // you can add coverage later if needed
-    // coverage: {
-    //   reporter: ['text', 'json', 'html'],
-    // },
+    // Ensure testing-library is included in the test setup
+    deps: {
+      external: ['@testing-library/react']
+    }
   }
 }));
