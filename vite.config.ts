@@ -4,7 +4,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -24,15 +23,13 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
-    // Ensure testing-library is included in the test setup
     deps: {
       external: ['@testing-library/react']
     }
   },
   build: {
-    // Configure build parameters
     sourcemap: true,
-    // Exclude server.js and api/main.py from the build process
+    outDir: 'static',
     rollupOptions: {
       external: ['api/main.py', 'server.js']
     }
