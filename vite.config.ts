@@ -31,7 +31,14 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
     outDir: 'static',
     rollupOptions: {
-      external: ['api/main.py', 'server.js', 'setup.py', 'api/__init__.py']
+      external: [
+        'api/main.py',
+        'server.js',
+        'setup.py',
+        'api/__init__.py',
+        'requirements.txt',
+        'api/requirements.txt'
+      ]
     }
   }
 }));
