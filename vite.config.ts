@@ -28,5 +28,13 @@ export default defineConfig(({ mode }) => ({
     deps: {
       external: ['@testing-library/react']
     }
+  },
+  build: {
+    // Configure build parameters
+    sourcemap: true,
+    // Exclude server.js and api/main.py from the build process
+    rollupOptions: {
+      external: ['api/main.py', 'server.js']
+    }
   }
 }));
