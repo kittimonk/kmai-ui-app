@@ -4,6 +4,8 @@ set -e
 
 echo "Starting deployment process..."
 
+cd /home/site/wwwroot
+
 # Install Node.js dependencies if not already installed
 if [ ! -d "node_modules" ]; then
   echo "Installing Node.js dependencies including dev dependencies..."
@@ -11,7 +13,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # Install Python dependencies if not already installed
-if [ ! -d "api/__pycache__" ]; then
+if [ -f "requirements.txt" ]; then
   echo "Installing Python dependencies..."
   pip install --no-cache-dir -r requirements.txt
 fi
