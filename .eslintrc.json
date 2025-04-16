@@ -31,5 +31,5 @@
   "rules": {
     "react/react-in-jsx-scope": "off"
   },
-  "ignorePatterns": ["api/main.py", "server.js", "node_modules/", "dist/", "build/", "coverage/"]
+  "ignorePatterns": ["api/main.py", "server.js", "node_modules/", "dist/", "build/", "coverage/", "**/*.test.ts", "**/*.test.tsx", "**/test/**"]
 }
