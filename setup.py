@@ -2,9 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="ai-knowledge-app",
-    version="1.0.0",
+    name="kmai-ent03-ui-app",  # Match the package name in your .tar.gz
+    version="1.0.5",  # Match the version in your .tar.gz
     packages=find_packages(),
+    include_package_data=True,
     install_requires=[
         "fastapi==0.109.0",
         "uvicorn==0.27.0",
@@ -25,6 +26,6 @@ setup(
         "striprtf==0.0.18",
         "azure-search-documents==11.4.0",
     ],
-    include_package_data=True,
+    python_requires=">=3.8",
     zip_safe=False,
 )

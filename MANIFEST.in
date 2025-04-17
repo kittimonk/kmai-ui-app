@@ -3,3 +3,5 @@ include requirements.txt
 include backend/requirements.txt
 include static/*
 recursive-include static *
+recursive-include backend *
+include setup.py

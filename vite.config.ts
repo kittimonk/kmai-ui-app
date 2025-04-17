@@ -39,7 +39,8 @@ export default defineConfig(({ mode }) => ({
         'requirements.txt',
         'backend/requirements.txt',
         'MANIFEST.in',
-        '.deployment'
+        '.deployment',
+        'backend/**/*'
       ]
     }
   }

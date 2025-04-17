@@ -34,15 +34,12 @@ else
     exit 1
 fi
 
-# Try to install from setup.py first (proper Python package)
-echo "Installing Python package..."
-$PIP_CMD install -e .
+echo "Installing Python dependencies from requirements.txt..."
+$PIP_CMD install --no-cache-dir -r requirements.txt
 
-# Also install from requirements.txt as fallback
-if [ -f "requirements.txt" ]; then
-    echo "Installing from requirements.txt as fallback..."
-    $PIP_CMD install --no-cache-dir -r requirements.txt
-fi
+# Install the package in development mode
+echo "Installing the Python package in development mode..."
+$PIP_CMD install -e .
 
 # Start the FastAPI server
 echo "Starting FastAPI backend..."
