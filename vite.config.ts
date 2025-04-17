@@ -40,7 +40,8 @@ export default defineConfig(({ mode }) => ({
         'backend/requirements.txt',
         'MANIFEST.in',
         '.deployment',
-        'backend/**/*'
+        'backend/**/*',
+        'kmai_ent03_ui_app.egg-info/**/*'
       ]
     }
   }
