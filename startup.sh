@@ -1,6 +1,6 @@
 
 #!/bin/bash
-set -e
+set -e  # Exit immediately if a command exits with a non-zero status
 
 echo "Starting deployment process..."
 
@@ -8,19 +8,13 @@ cd /home/site/wwwroot
 
 # Check if we already have a static folder
 if [ ! -d "static" ]; then
-    echo "Static folder not found. Building the app..."
+    echo "Static folder not found. Something is wrong with the deployment."
+    echo "Static folder should have been included in the deployment package."
+    echo "Checking what files are available:"
+    ls -la
     
-    # Check if Node.js is available
-    if command -v npm &> /dev/null; then
-        echo "Installing Node.js dependencies..."
-        npm ci
-        
-        echo "Building static files..."
-        npx vite build
-    else
-        echo "WARNING: Node.js not available. Cannot build static files."
-        # Assuming static files were included in the deployment package
-    fi
+    echo "Exiting with error."
+    exit 1
 fi
 
 # Install Python dependencies

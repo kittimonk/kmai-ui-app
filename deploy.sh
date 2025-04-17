@@ -1,5 +1,6 @@
 
 #!/bin/bash
+set -e  # Exit immediately if a command exits with a non-zero status
 
 # Script checks if static directory exists
 if [ ! -d "static" ]; then
@@ -26,6 +27,6 @@ EOL
 
 # List files being included in the package
 echo "Files included in the package:"
-find . -type f \( -name "*.py" -o -name "*.txt" -o -path "./static/*" \) -not -path "./node_modules/*" -not -path "./src/*"
+find . -type f \( -name "*.py" -o -name "*.txt" -o -path "./static/*" \) -not -path "./node_modules/*" -not -path "./src/*" -not -path "./.git/*"
 
 echo "The package is ready for deployment."

@@ -1,5 +1,6 @@
 
 #!/bin/bash
+set -e  # Exit immediately if a command exits with a non-zero status
 
 # Build the Vite app to static directory
 echo "Building Vite app to static directory..."

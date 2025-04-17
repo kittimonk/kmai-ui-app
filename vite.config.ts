@@ -32,20 +32,35 @@ export default defineConfig(({ mode }) => ({
     outDir: 'static',
     rollupOptions: {
       external: [
+        // Backend files
         '/backend/**/*',
         '/backend/*',
         'backend/**/*',
+        'backend/*',
+        '**/backend/**',
+        // Deployment scripts
         'server.js',
         'setup.py',
         '.deployment',
         'requirements.txt',
         'backend/requirements.txt',
-        'MANIFEST.in',
         'kmai_ent03_ui_app.egg-info/**/*',
+        'kmai_ent03_ui_app.egg-info/*',
         'startup.sh',
         'web.config',
         'deploy.sh',
-        'build-local.sh'
+        'build-local.sh',
+        // Additional files to exclude
+        'MANIFEST.in',
+        '.env',
+        '.env.dev',
+        '.gitignore',
+        'README.md',
+        'src/components/ai-app.yml',
+        'CODEOWNERS',
+        'EDP.yml',
+        '.github/**/*',
+        '**/node_modules/**'
       ]
     }
   }
