@@ -6,49 +6,48 @@ echo "Starting deployment process..."
 
 cd /home/site/wwwroot
 
-# Check if Python is available and install Python dependencies first
-if command -v python &> /dev/null || command -v python3 &> /dev/null; then
-    echo "Python is available. Installing Python dependencies..."
-    
-    # Try to use pip or pip3, whichever is available
-    if command -v pip &> /dev/null; then
-        PIP_CMD="pip"
-    elif command -v pip3 &> /dev/null; then
-        PIP_CMD="pip3"
-    else
-        echo "ERROR: pip or pip3 is not available."
-        exit 1
-    fi
-    
-    # Install from setup.py
-    $PIP_CMD install -e .
-    
-    # Also try requirements.txt as fallback
-    if [ -f "requirements.txt" ]; then
-        echo "Installing from requirements.txt as fallback..."
-        $PIP_CMD install --no-cache-dir -r requirements.txt
-    fi
-fi
-
-# Install Node.js dependencies if not already installed
-if command -v npm &> /dev/null; then
-    echo "Node.js is available. Installing Node.js dependencies..."
-    if [ ! -d "node_modules" ]; then
-        echo "Installing Node.js dependencies including dev dependencies..."
-        npm ci
-    fi
-fi
-
-# Build the static files if they don't exist
+# Check if we already have a static folder
 if [ ! -d "static" ]; then
-    echo "Building static files..."
-    npx vite build
+    echo "Static folder not found. Building the app..."
+    
+    # Check if Node.js is available
+    if command -v npm &> /dev/null; then
+        echo "Installing Node.js dependencies..."
+        npm ci
+        
+        echo "Building static files..."
+        npx vite build
+    else
+        echo "WARNING: Node.js not available. Cannot build static files."
+        # Assuming static files were included in the deployment package
+    fi
+fi
+
+# Install Python dependencies
+echo "Installing Python dependencies..."
+if command -v pip &> /dev/null; then
+    PIP_CMD="pip"
+elif command -v pip3 &> /dev/null; then
+    PIP_CMD="pip3"
+else
+    echo "ERROR: pip or pip3 is not available."
+    exit 1
+fi
+
+# Try to install from setup.py first (proper Python package)
+echo "Installing Python package..."
+$PIP_CMD install -e .
+
+# Also install from requirements.txt as fallback
+if [ -f "requirements.txt" ]; then
+    echo "Installing from requirements.txt as fallback..."
+    $PIP_CMD install --no-cache-dir -r requirements.txt
 fi
 
 # Start the FastAPI server
 echo "Starting FastAPI backend..."
 cd /home/site/wwwroot
-python -m uvicorn api.main:app --workers 2 --host 0.0.0.0 --port 3000 &
+python -m uvicorn backend.main:app --workers 2 --host 0.0.0.0 --port 3000 &
 
 # Wait for backend to start
 sleep 5

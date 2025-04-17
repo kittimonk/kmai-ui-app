@@ -32,12 +32,14 @@ export default defineConfig(({ mode }) => ({
     outDir: 'static',
     rollupOptions: {
       external: [
-        'api/main.py',
+        'backend/main.py',
         'server.js',
         'setup.py',
-        'api/__init__.py',
+        'backend/__init__.py',
         'requirements.txt',
-        'api/requirements.txt'
+        'backend/requirements.txt',
+        'MANIFEST.in',
+        '.deployment'
       ]
     }
   }
