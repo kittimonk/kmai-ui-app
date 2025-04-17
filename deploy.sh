@@ -4,7 +4,21 @@ set -e  # Exit immediately if a command exits with a non-zero status
 
 # Script checks if static directory exists
 if [ ! -d "static" ]; then
-  echo "ERROR: Static directory not found. Please run 'npm run build' locally first."
+  echo "ERROR: Static directory not found."
+  echo "Please run 'npm run build' locally first to generate the static directory."
+  echo "If you've already generated the static directory, make sure to force-add it to git:"
+  echo "  git add -f static/"
+  echo "  git commit -m 'Add static directory with build files'"
+  exit 1
+fi
+
+# Check if static directory has content
+if [ -z "$(ls -A static 2>/dev/null)" ]; then
+  echo "ERROR: Static directory is empty."
+  echo "Please run 'npm run build' locally first to generate the static content."
+  echo "If you've already generated the static content, make sure to force-add it to git:"
+  echo "  git add -f static/*"
+  echo "  git commit -m 'Add static files'"
   exit 1
 fi
 
