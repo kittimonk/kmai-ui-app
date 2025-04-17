@@ -8,13 +8,21 @@ cd /home/site/wwwroot
 
 # Check if we already have a static folder
 if [ ! -d "static" ]; then
-    echo "Static folder not found. Something is wrong with the deployment."
-    echo "Static folder should have been included in the deployment package."
-    echo "Checking what files are available:"
-    ls -la
+    echo "Static folder not found. Building the app..."
     
-    echo "Exiting with error."
-    exit 1
+    # Check if Node.js is available
+    if command -v npm &> /dev/null; then
+        echo "Installing Node.js dependencies..."
+        npm ci
+        
+        echo "Building static files..."
+        npx vite build
+    else
+        echo "ERROR: Node.js not available. Cannot build static files."
+        echo "Checking what files are available:"
+        ls -la
+        exit 1
+    fi
 fi
 
 # Install Python dependencies
