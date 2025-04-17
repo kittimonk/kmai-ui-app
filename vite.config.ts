@@ -32,15 +32,13 @@ export default defineConfig(({ mode }) => ({
     outDir: 'static',
     rollupOptions: {
       external: [
-        'backend/main.py',
+        'backend/**/*',
         'server.js',
         'setup.py',
-        'backend/__init__.py',
+        '.deployment',
         'requirements.txt',
         'backend/requirements.txt',
         'MANIFEST.in',
-        '.deployment',
-        'backend/**/*',
         'kmai_ent03_ui_app.egg-info/**/*'
       ]
     }
