@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => ({
     outDir: 'static',
     rollupOptions: {
       external: [
+        '/backend/**/*',
+        '/backend/*',
         'backend/**/*',
         'server.js',
         'setup.py',
@@ -39,7 +41,11 @@ export default defineConfig(({ mode }) => ({
         'requirements.txt',
         'backend/requirements.txt',
         'MANIFEST.in',
-        'kmai_ent03_ui_app.egg-info/**/*'
+        'kmai_ent03_ui_app.egg-info/**/*',
+        'startup.sh',
+        'web.config',
+        'deploy.sh',
+        'build-local.sh'
       ]
     }
   }
