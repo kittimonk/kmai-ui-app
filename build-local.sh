@@ -7,16 +7,21 @@ echo "Building Vite app to static directory..."
 npm ci
 npx vite build
 
-# Ensure static directory exists
+# Ensure static directory exists and has content
 if [ -d "static" ]; then
   echo "Static folder successfully created."
   
-  # Create a .gitkeep file to ensure the directory is tracked in git
-  touch static/.gitkeep
-  echo "Added .gitkeep file to ensure static directory is tracked in git"
-  echo "Important: Make sure to force-add the static directory to git with:"
-  echo "  git add -f static/"
-  echo "  git commit -m 'Add static directory with build files'"
+  # Check if index.html exists in the static directory
+  if [ -f "static/index.html" ]; then
+    echo "index.html found in static directory"
+    echo "Static directory contents:"
+    ls -la static/
+  else
+    echo "ERROR: index.html not found in static directory!"
+    echo "Static directory contents:"
+    ls -la static/
+    exit 1
+  fi
 else
   echo "ERROR: Static folder was not created. Build process may have failed."
   exit 1
@@ -64,6 +69,6 @@ echo "Egg-info directory:"
 ls -la kmai_ent03_ui_app.egg-info/
 
 echo "You can now commit these files to your repository:"
-echo "- static/ directory (use 'git add -f static/' to force add if it's gitignored)"
+echo "- static/ directory"
 echo "- kmai_ent03_ui_app.egg-info/ directory"
 echo "- All Python-related files (setup.py, requirements.txt, etc.)"
