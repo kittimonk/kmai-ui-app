@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -27,8 +26,8 @@ echo "version = \"1.0.0\"" >> "$PACKAGE_DIR/kmai_app/__init__.py"
 echo "Copying static files..."
 cp -r static/* "$PACKAGE_DIR/kmai_app/static/"
 
-# Create main.py file
-cat > "$PACKAGE_DIR/kmai_app/main.py" << 'EOL'
+# Create main.py file (now app.py)
+cat > "$PACKAGE_DIR/kmai_app/app.py" << 'EOL'
 import os
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -119,7 +118,7 @@ EOL
 cat > "$PACKAGE_DIR/tests/test_app.py" << 'EOL'
 import unittest
 from fastapi.testclient import TestClient
-from kmai_app.main import app
+from kmai_app.app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
@@ -155,13 +154,13 @@ pip install -e .
 
 ```bash
 cd kmai_app
-python main.py
+python app.py
 ```
 
 Or using uvicorn directly:
 
 ```bash
-uvicorn kmai_app.main:app --reload
+uvicorn kmai_app.app:app --reload
 ```
 
 ## Running Tests

@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -68,10 +67,10 @@ $PIP_CMD install -e .
 echo "Making sure Express.js dependencies are installed..."
 npm install express http-proxy-middleware
 
-# Start the FastAPI server
+# Start the FastAPI server with updated reference to app.py
 echo "Starting FastAPI backend..."
 cd /home/site/wwwroot
-python -m uvicorn backend.main:app --workers 2 --host 0.0.0.0 --port 3000 &
+python -m uvicorn backend.app:app --workers 2 --host 0.0.0.0 --port 3000 &
 
 # Wait for backend to start
 sleep 5

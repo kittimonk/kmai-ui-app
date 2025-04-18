@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -24,8 +23,8 @@ cp -r static/* "$APP_DIR/static/"
 # Create __init__.py
 echo "# Minimal KMAI App" > "$APP_DIR/__init__.py"
 
-# Create main.py file
-cat > "$APP_DIR/main.py" << 'EOL'
+# Create main.py file (now app.py)
+cat > "$APP_DIR/app.py" << 'EOL'
 import os
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -58,7 +57,7 @@ from setuptools import setup
 setup(
     name="kmai-minimal-app",
     version="1.0.0",
-    py_modules=["main"],
+    py_modules=["app"],
     install_requires=[
         "fastapi==0.109.0",
         "uvicorn==0.27.0"
@@ -70,7 +69,7 @@ EOL
 cat > "$APP_DIR/MANIFEST.in" << 'EOL'
 include static/*
 recursive-include static *
-include main.py
+include app.py
 include __init__.py
 EOL
 
@@ -78,7 +77,7 @@ EOL
 cat > "$APP_DIR/tests/test_app.py" << 'EOL'
 import unittest
 from fastapi.testclient import TestClient
-from main import app
+from app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
@@ -105,7 +104,7 @@ A minimal Python application structure containing just:
 ## Running the Application
 
 ```bash
-uvicorn main:app --reload
+uvicorn app:app --reload
 ```
 
 ## Deploying as a Python Package
