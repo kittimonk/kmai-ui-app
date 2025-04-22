@@ -2,8 +2,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="kmai-app",
-    version="1.0.0",
+    name="kmai-ent03-ui-app",
+    version="1.0.6",
     packages=find_packages(),
     package_dir={"": "src"},
     include_package_data=True,
