@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -138,19 +137,17 @@ fi
 cat > "$PACKAGE_DIR/setup.py" << 'EOL'
 from setuptools import setup, find_packages
 
+def read_requirements():
+    with open('requirements.txt', 'r') as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
 setup(
     name="kmai-app",
     version="1.0.0",
     packages=find_packages(),
     package_dir={"": "src"},
     include_package_data=True,
-    install_requires=[
-        "fastapi==0.109.0",
-        "uvicorn==0.27.0",
-        "python-jose==3.3.0",
-        "requests==2.31.0",
-        "python-multipart==0.0.6"
-    ],
+    install_requires=read_requirements(),
     python_requires=">=3.11",
     zip_safe=False,
 )
