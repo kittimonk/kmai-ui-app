@@ -2,6 +2,9 @@
 #!/bin/bash
 set -e
 
+# Install test requirements first
+pip install -r test-requirements.txt
+
 # Make the create-python-package.sh script executable
 chmod +x create-python-package.sh
 
@@ -20,4 +23,3 @@ python -m pytest tests/
 # Start the application to verify it works
 cd kmai_app
 python -m uvicorn app:app --host 0.0.0.0 --port 3000
-
