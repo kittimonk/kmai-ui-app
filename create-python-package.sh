@@ -19,29 +19,29 @@ if [ ! -d "static" ]; then
   exit 1
 fi
 
-# Create Python package structure
+# Create Python package structure with src directory
 echo "Creating Python package structure..."
-mkdir -p "$PACKAGE_DIR/kmai_app"
-mkdir -p "$PACKAGE_DIR/kmai_app/static"
+mkdir -p "$PACKAGE_DIR/src"
+mkdir -p "$PACKAGE_DIR/src/static"
 mkdir -p "$PACKAGE_DIR/tests"
 
 # Create __init__.py files
-echo "# KMAI Python Application" > "$PACKAGE_DIR/kmai_app/__init__.py"
-echo "version = \"1.0.0\"" >> "$PACKAGE_DIR/kmai_app/__init__.py"
+echo "# KMAI Python Application" > "$PACKAGE_DIR/src/__init__.py"
+echo "version = \"1.0.0\"" >> "$PACKAGE_DIR/src/__init__.py"
 
-# Copy static files - ensure the static directory exists in destination first
+# Copy static files
 echo "Copying static files..."
 if [ -d "static" ]; then
   # Make sure the destination directory exists
-  mkdir -p "$PACKAGE_DIR/kmai_app/static"
-  cp -r static/* "$PACKAGE_DIR/kmai_app/static/"
+  mkdir -p "$PACKAGE_DIR/src/static"
+  cp -r static/* "$PACKAGE_DIR/src/static/"
   echo "Static files copied successfully."
 else
   echo "Warning: static directory not found. This may cause issues."
 fi
 
-# Create app.py file
-cat > "$PACKAGE_DIR/kmai_app/app.py" << 'EOL'
+# Create app.py file in src directory
+cat > "$PACKAGE_DIR/src/app.py" << 'EOL'
 import os
 import sys
 from pathlib import Path
@@ -91,9 +91,6 @@ def health():
 def api_health():
     return {"status": "ok", "message": "API server is running"}
 
-# Copy relevant API endpoints from original main.py
-# ... Add your API endpoints here
-
 # Mount static files - only if directory exists
 if static_dir.exists():
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
@@ -118,7 +115,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 EOL
 
-# Create setup.py
+# Update setup.py to reflect new structure
 cat > "$PACKAGE_DIR/setup.py" << 'EOL'
 from setuptools import setup, find_packages
 
@@ -126,6 +123,7 @@ setup(
     name="kmai-app",
     version="1.0.0",
     packages=find_packages(),
+    package_dir={"": "src"},
     include_package_data=True,
     install_requires=[
         "fastapi==0.109.0",
@@ -139,36 +137,27 @@ setup(
 )
 EOL
 
-# Create MANIFEST.in
+# Update MANIFEST.in for new structure
 cat > "$PACKAGE_DIR/MANIFEST.in" << 'EOL'
 include requirements.txt
-recursive-include kmai_app/static *
-include kmai_app/*.py
+recursive-include src/static *
+include src/*.py
 EOL
 
-# Create requirements.txt
-cat > "$PACKAGE_DIR/requirements.txt" << 'EOL'
-fastapi==0.109.0
-uvicorn==0.27.0
-python-jose==3.3.0
-requests==2.31.0
-python-multipart==0.0.6
-EOL
-
-# Create a modified test file that checks for static directory existence
+# Create test file with updated imports
 cat > "$PACKAGE_DIR/tests/test_app.py" << 'EOL'
 import os
 import unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
-from kmai_app.app import app
+from src.app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         # Ensure we're in the right directory for tests
         self.package_dir = Path(__file__).parent.parent
-        self.static_dir = self.package_dir / "kmai_app" / "static"
+        self.static_dir = self.package_dir / "src" / "static"
         
     def test_static_directory_exists(self):
         """Test that the static directory exists"""
@@ -189,51 +178,40 @@ if __name__ == "__main__":
     unittest.main()
 EOL
 
-# Create a helpful README.md file
-cat > "$PACKAGE_DIR/README.md" << 'EOL'
-# KMAI Python Application
+# Update test-package.sh to use new structure
+<lov-write file_path="test-package.sh">
+#!/bin/bash
+set -e
 
-This is a Python package containing the KMAI application with a FastAPI backend and pre-built static frontend assets.
+# Install test requirements first
+pip install -r test-requirements.txt
 
-## Installation
+# Make the create-python-package.sh script executable
+chmod +x create-python-package.sh
 
-```bash
+# Run the script
+./create-python-package.sh
+
+# Navigate to the generated package directory
+cd python_package
+
+# Verify that src/static directory exists and contains files
+if [ ! -d "src/static" ]; then
+  echo "ERROR: src/static directory does not exist"
+  exit 1
+fi
+
+if [ -z "$(ls -A src/static)" ]; then
+   echo "WARNING: src/static directory is empty. This may cause issues."
+fi
+
+# Install the package in development mode
 pip install -e .
-```
 
-## Running the Application
+# Run the tests
+python -m pytest tests/ -v
 
-```bash
-cd kmai_app
-python app.py
-```
-
-Or using uvicorn directly:
-
-```bash
-uvicorn kmai_app.app:app --reload
-```
-
-## Running Tests
-
-```bash
-python -m unittest discover
-```
-
-## Troubleshooting
-
-### Static directory missing
-If you encounter errors about the static directory not existing:
-
-1. Make sure you run the build process first: `npm ci && npx vite build`
-2. Check that the `static` directory exists and contains the built files
-3. Ensure the files are properly copied to `kmai_app/static/` during package creation
-EOL
-
-echo "Python package structure created in the '$PACKAGE_DIR' directory."
-echo "To create a new repository with these files:"
-echo "1. Create a new Git repository"
-echo "2. Copy the contents of the '$PACKAGE_DIR' directory into it"
-echo "3. Commit and push the files"
-echo ""
-echo "Done!"
+# Optional: Start the application to verify it works
+# Uncomment these lines if you want the script to start the app
+# cd src
+# python -m uvicorn app:app --host 0.0.0.0 --port 3000
