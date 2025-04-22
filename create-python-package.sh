@@ -42,7 +42,19 @@ fi
 
 # Copy requirements.txt to package directory
 echo "Copying requirements.txt to package directory..."
-cp requirements.txt "$PACKAGE_DIR/"
+if [ -f "requirements.txt" ]; then
+  cp requirements.txt "$PACKAGE_DIR/"
+  echo "requirements.txt copied successfully."
+else
+  echo "Warning: requirements.txt not found. Creating a basic one."
+  cat > "$PACKAGE_DIR/requirements.txt" << 'EOL'
+fastapi>=0.109.0,<0.110.0
+uvicorn>=0.27.0,<0.28.0
+python-jose>=3.3.0,<3.4.0
+requests>=2.31.0,<2.32.0
+python-multipart>=0.0.6,<0.1.0
+EOL
+fi
 
 # Copy app.py file from backend directory if it exists
 if [ -f "backend/app.py" ]; then
