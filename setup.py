@@ -2,9 +2,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="kmai-ent03-ui-app",  # Match the package name in your .tar.gz
-    version="1.0.5",  # Match the version in your .tar.gz
+    name="kmai-app",
+    version="1.0.0",
     packages=find_packages(),
+    package_dir={"": "src"},
     include_package_data=True,
     install_requires=[
         "fastapi==0.109.0",
@@ -24,8 +25,8 @@ setup(
         "redis==5.0.1",
         "pyodbc==5.0.1",
         "striprtf==0.0.18",
-        "azure-search-documents==11.4.0",
+        "azure-search-documents==11.4.0"
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.11",
     zip_safe=False,
 )
