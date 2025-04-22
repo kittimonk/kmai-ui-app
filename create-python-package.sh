@@ -40,8 +40,15 @@ else
   echo "Warning: static directory not found. This may cause issues."
 fi
 
-# Create app.py file in src directory
-cat > "$PACKAGE_DIR/src/app.py" << 'EOL'
+# Copy app.py file from backend directory if it exists
+if [ -f "backend/app.py" ]; then
+  echo "Copying app.py from backend directory..."
+  cp backend/app.py "$PACKAGE_DIR/src/app.py"
+  echo "app.py copied successfully from backend directory."
+else
+  # Create app.py file in src directory
+  echo "Creating default app.py in src directory..."
+  cat > "$PACKAGE_DIR/src/app.py" << 'EOL'
 import os
 import sys
 from pathlib import Path
@@ -114,8 +121,9 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 EOL
+fi
 
-# Update setup.py to reflect new structure
+# Update setup.py to reflect new structure and Python version requirement
 cat > "$PACKAGE_DIR/setup.py" << 'EOL'
 from setuptools import setup, find_packages
 
@@ -132,7 +140,7 @@ setup(
         "requests==2.31.0",
         "python-multipart==0.0.6"
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.11",
     zip_safe=False,
 )
 EOL
