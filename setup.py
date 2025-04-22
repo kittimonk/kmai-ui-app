@@ -1,32 +1,17 @@
 
 from setuptools import setup, find_packages
 
+def read_requirements():
+    with open('requirements.txt', 'r') as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
 setup(
     name="kmai-ent03-ui-app",
     version="1.0.6",
     packages=find_packages(),
     package_dir={"": "src"},
     include_package_data=True,
-    install_requires=[
-        "fastapi==0.109.0",
-        "uvicorn==0.27.0",
-        "python-jose==3.3.0",
-        "requests==2.31.0",
-        "python-multipart==0.0.6",
-        "sentence-transformers==2.2.2",
-        "scikit-learn==1.3.2",
-        "azure-storage-file-datalake==12.12.0",
-        "azure-storage-blob==12.18.0",
-        "azure-identity==1.14.0",
-        "azure-mgmt-cognitiveservices==13.5.0",
-        "openai==1.10.0",
-        "numpy==1.26.0",
-        "httpx==0.24.1",
-        "redis==5.0.1",
-        "pyodbc==5.0.1",
-        "striprtf==0.0.18",
-        "azure-search-documents==11.4.0"
-    ],
+    install_requires=read_requirements(),
     python_requires=">=3.11",
     zip_safe=False,
 )
