@@ -1,3 +1,4 @@
+
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -38,6 +39,10 @@ if [ -d "static" ]; then
 else
   echo "Warning: static directory not found. This may cause issues."
 fi
+
+# Copy requirements.txt to package directory
+echo "Copying requirements.txt to package directory..."
+cp requirements.txt "$PACKAGE_DIR/"
 
 # Copy app.py file from backend directory if it exists
 if [ -f "backend/app.py" ]; then
@@ -133,13 +138,25 @@ if __name__ == "__main__":
 EOL
 fi
 
-# Update setup.py to reflect new structure and Python version requirement
+# Update setup.py with read_requirements function that handles file not found scenario
 cat > "$PACKAGE_DIR/setup.py" << 'EOL'
 from setuptools import setup, find_packages
+import os
 
 def read_requirements():
-    with open('requirements.txt', 'r') as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    try:
+        with open('requirements.txt', 'r') as f:
+            return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    except FileNotFoundError:
+        # Fallback to basic dependencies if requirements.txt is not found
+        print("WARNING: requirements.txt not found, using default dependencies")
+        return [
+            "fastapi>=0.109.0,<0.110.0",
+            "uvicorn>=0.27.0,<0.28.0",
+            "python-jose>=3.3.0,<3.4.0",
+            "requests>=2.31.0,<2.32.0",
+            "python-multipart>=0.0.6,<0.1.0"
+        ]
 
 setup(
     name="kmai-app",
@@ -153,7 +170,7 @@ setup(
 )
 EOL
 
-# Update MANIFEST.in for new structure
+# Update MANIFEST.in for new structure and to include requirements.txt
 cat > "$PACKAGE_DIR/MANIFEST.in" << 'EOL'
 include requirements.txt
 recursive-include src/static *
