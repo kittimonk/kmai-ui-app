@@ -4,9 +4,12 @@ set -e  # Exit immediately if a command exits with a non-zero status
 
 echo "Creating Python package structure from existing application..."
 
+# Use the correct package directory and name
+PKG_DIR="kmai-ent03-ui-app"
+PKG_NAME="kmai_ent03_ui_app"  # for Python imports and setup.py
+
 # Create a temporary directory for the Python package
-PACKAGE_DIR="python_package"
-mkdir -p "$PACKAGE_DIR"
+mkdir -p "$PKG_DIR"
 
 # Run the build to generate static files
 echo "Building frontend assets..."
@@ -21,20 +24,19 @@ fi
 
 # Create Python package structure with src directory
 echo "Creating Python package structure..."
-mkdir -p "$PACKAGE_DIR/src"
-mkdir -p "$PACKAGE_DIR/src/static"
-mkdir -p "$PACKAGE_DIR/tests"
+mkdir -p "$PKG_DIR/$PKG_NAME"
+mkdir -p "$PKG_DIR/$PKG_NAME/static"
+mkdir -p "$PKG_DIR/tests"
 
 # Create __init__.py files
-echo "# KMAI Python Application" > "$PACKAGE_DIR/src/__init__.py"
-echo "version = \"1.0.0\"" >> "$PACKAGE_DIR/src/__init__.py"
+echo "# $PKG_NAME Python Application" > "$PKG_DIR/$PKG_NAME/__init__.py"
+echo "version = \"1.0.0\"" >> "$PKG_DIR/$PKG_NAME/__init__.py"
 
 # Copy static files
 echo "Copying static files..."
 if [ -d "static" ]; then
-  # Make sure the destination directory exists
-  mkdir -p "$PACKAGE_DIR/src/static"
-  cp -r static/* "$PACKAGE_DIR/src/static/"
+  mkdir -p "$PKG_DIR/$PKG_NAME/static"
+  cp -r static/* "$PKG_DIR/$PKG_NAME/static/"
   echo "Static files copied successfully."
 else
   echo "Warning: static directory not found. This may cause issues."
@@ -43,11 +45,11 @@ fi
 # Copy requirements.txt to package directory
 echo "Copying requirements.txt to package directory..."
 if [ -f "requirements.txt" ]; then
-  cp requirements.txt "$PACKAGE_DIR/"
+  cp requirements.txt "$PKG_DIR/"
   echo "requirements.txt copied successfully."
 else
   echo "Warning: requirements.txt not found. Creating a basic one."
-  cat > "$PACKAGE_DIR/requirements.txt" << 'EOL'
+  cat > "$PKG_DIR/requirements.txt" << 'EOL'
 fastapi>=0.109.0,<0.110.0
 uvicorn>=0.27.0,<0.28.0
 python-jose>=3.3.0,<3.4.0
@@ -59,28 +61,28 @@ fi
 # Copy app.py file from backend directory if it exists
 if [ -f "backend/app.py" ]; then
   echo "Copying app.py from backend directory..."
-  mkdir -p "$PACKAGE_DIR/src"
-  cp backend/app.py "$PACKAGE_DIR/src/app.py"
+  mkdir -p "$PKG_DIR/$PKG_NAME"
+  cp backend/app.py "$PKG_DIR/$PKG_NAME/app.py"
   
   # Check if app.py contains static file mounting code
-  if ! grep -q "app.mount(\"/\", StaticFiles" "$PACKAGE_DIR/src/app.py"; then
+  if ! grep -q "app.mount(\"/\", StaticFiles" "$PKG_DIR/$PKG_NAME/app.py"; then
     echo "Adding static file mounting code to app.py..."
     # Add Path import if missing
-    if ! grep -q "from pathlib import Path" "$PACKAGE_DIR/src/app.py"; then
-      sed -i '1s/^/from pathlib import Path\n/' "$PACKAGE_DIR/src/app.py"
+    if ! grep -q "from pathlib import Path" "$PKG_DIR/$PKG_NAME/app.py"; then
+      sed -i '1s/^/from pathlib import Path\n/' "$PKG_DIR/$PKG_NAME/app.py"
     fi
     # Append the static mounting code before the __main__ block
-    sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\\'"'"'t exist")\n' "$PACKAGE_DIR/src/app.py"
+    sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\\'"'"'t exist")\n' "$PKG_DIR/$PKG_NAME/app.py"
   fi
   
   # Make sure the port is 8000 in the __main__ block
-  sed -i 's/port=int(os.environ.get("PORT", [0-9]\+))/port=int(os.environ.get("PORT", 8000))/g' "$PACKAGE_DIR/src/app.py"
+  sed -i 's/port=int(os.environ.get("PORT", [0-9]\+))/port=int(os.environ.get("PORT", 8000))/g' "$PKG_DIR/$PKG_NAME/app.py"
   
   echo "app.py copied and updated successfully from backend directory."
 else
-  # Create app.py file in src directory
-  echo "Creating default app.py in src directory..."
-  cat > "$PACKAGE_DIR/src/app.py" << 'EOL'
+  # Create app.py file in package directory
+  echo "Creating default app.py in package directory..."
+  cat > "$PKG_DIR/$PKG_NAME/app.py" << 'EOL'
 import os
 import sys
 from pathlib import Path
@@ -155,8 +157,8 @@ if __name__ == "__main__":
 EOL
 fi
 
-# Create a proper setup.py with a robust read_requirements function
-cat > "$PACKAGE_DIR/setup.py" << 'EOL'
+# Create a robust setup.py using PKG_NAME and src directory
+cat > "$PKG_DIR/setup.py" << EOL
 from setuptools import setup, find_packages
 import os
 
@@ -176,10 +178,10 @@ def read_requirements():
         ]
 
 setup(
-    name="kmai-app",
+    name="$PKG_NAME",
     version="1.0.0",
     packages=find_packages(),
-    package_dir={"": "src"},
+    package_dir={"": "."},
     include_package_data=True,
     install_requires=read_requirements(),
     python_requires=">=3.11",
@@ -188,32 +190,38 @@ setup(
 EOL
 
 # Create a more thorough MANIFEST.in file
-cat > "$PACKAGE_DIR/MANIFEST.in" << 'EOL'
+cat > "$PKG_DIR/MANIFEST.in" << EOL
 include requirements.txt
-recursive-include src/static *
-include src/*.py
+recursive-include $PKG_NAME/static *
+include $PKG_NAME/*.py
 EOL
 
-# Create a test file that properly imports the app
-cat > "$PACKAGE_DIR/tests/test_app.py" << 'EOL'
+# Create a test file that properly imports the app using the correct package name
+cat > "$PKG_DIR/tests/test_app.py" << EOL
 import os
 import unittest
 from pathlib import Path
-from fastapi.testclient import TestClient
-from src.app import app
+from $PKG_NAME.app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = self._get_test_client()
         # Ensure we're in the right directory for tests
         self.package_dir = Path(__file__).parent.parent
-        self.static_dir = self.package_dir / "src" / "static"
-        
+        self.static_dir = self.package_dir / "$PKG_NAME" / "static"
+
+    def _get_test_client(self):
+        try:
+            from fastapi.testclient import TestClient
+            return TestClient(app)
+        except ImportError:
+            raise RuntimeError("fastapi.testclient is required for tests")
+
     def test_static_directory_exists(self):
         """Test that the static directory exists"""
         print(f"Checking static directory at: {self.static_dir}")
         self.assertTrue(self.static_dir.exists(), f"Static directory does not exist at {self.static_dir}")
-        
+
     def test_health_endpoint(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
@@ -228,4 +236,5 @@ if __name__ == "__main__":
     unittest.main()
 EOL
 
-echo "Python package structure created successfully in the '$PACKAGE_DIR' directory."
+echo "Python package structure created successfully in the '$PKG_DIR' directory."
+
