@@ -49,7 +49,7 @@ if [ -f "backend/app.py" ]; then
   if ! grep -q "app.mount(\"/\", StaticFiles" "$PACKAGE_DIR/src/app.py"; then
     echo "Adding static file mounting code to app.py..."
     # Append the static mounting code before the __main__ block
-    sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\'t exist")\n' "$PACKAGE_DIR/src/app.py"
+    sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\\'"'"'t exist")\n' "$PACKAGE_DIR/src/app.py"
   fi
   
   # Make sure the port is 8000 in the __main__ block
