@@ -157,45 +157,6 @@ if __name__ == "__main__":
 EOL
 fi
 
-# Create a robust setup.py using PKG_NAME and src directory
-cat > "$PKG_DIR/setup.py" << EOL
-from setuptools import setup, find_packages
-import os
-
-def read_requirements():
-    try:
-        with open('requirements.txt', 'r') as f:
-            return [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    except FileNotFoundError:
-        # Fallback to basic dependencies if requirements.txt is not found
-        print("WARNING: requirements.txt not found, using default dependencies")
-        return [
-            "fastapi>=0.109.0,<0.110.0",
-            "uvicorn>=0.27.0,<0.28.0",
-            "python-jose>=3.3.0,<3.4.0",
-            "requests>=2.31.0,<2.32.0",
-            "python-multipart>=0.0.6,<0.1.0"
-        ]
-
-setup(
-    name="$PKG_NAME",
-    version="1.0.0",
-    packages=find_packages(),
-    package_dir={"": "."},
-    include_package_data=True,
-    install_requires=read_requirements(),
-    python_requires=">=3.11",
-    zip_safe=False,
-)
-EOL
-
-# Create a more thorough MANIFEST.in file
-cat > "$PKG_DIR/MANIFEST.in" << EOL
-include requirements.txt
-recursive-include $PKG_NAME/static *
-include $PKG_NAME/*.py
-EOL
-
 # Create a test file that properly imports the app using the correct package name
 cat > "$PKG_DIR/tests/test_app.py" << EOL
 import os
@@ -236,5 +197,76 @@ if __name__ == "__main__":
     unittest.main()
 EOL
 
-echo "Python package structure created successfully in the '$PKG_DIR' directory."
+# Create a proper pytest.ini file to help configure tests
+cat > "$PKG_DIR/pytest.ini" << 'EOL'
+[pytest]
+testpaths = tests
+python_files = test_*.py
+python_functions = test_*
+EOL
 
+# Create __init__.py in tests directory to make it a proper package
+touch "$PKG_DIR/tests/__init__.py"
+
+# Create a robust setup.py using PKG_NAME
+cat > "$PKG_DIR/setup.py" << EOL
+from setuptools import setup, find_packages
+import os
+from pathlib import Path
+
+# The directory containing this file
+HERE = Path(__file__).parent
+
+def read_requirements(filename='requirements.txt'):
+    requirements = []
+    try:
+        with open(filename) as f:
+            reqs = f.read().splitlines()
+            for req in reqs:
+                if req.strip() and not req.startswith('#'):
+                    requirements.append(req)
+    except FileNotFoundError:
+        # Fallback to basic dependencies if requirements.txt is not found
+        print(f"WARNING: {filename} not found, using default dependencies")
+        return [
+            "fastapi>=0.109.0,<0.110.0",
+            "uvicorn>=0.27.0,<0.28.0",
+            "python-jose>=3.3.0,<3.4.0",
+            "requests>=2.31.0,<2.32.0",
+            "python-multipart>=0.0.6,<0.1.0"
+        ]
+    return requirements
+
+# Read requirements
+requires = read_requirements()
+
+# This call to setup() does all the work
+setup(
+    name="$PKG_NAME",
+    version="1.0.0",
+    packages=find_packages(where="."),
+    package_dir={"": "."},
+    include_package_data=True,
+    python_requires=">=3.11",
+    install_requires=requires,
+    cmdclass={
+        "test": lambda: None,  # Placeholder that won't run tests during setup.py test
+    },
+    entry_points={
+        "console_scripts": [
+            "$PKG_NAME=$PKG_NAME.app:app",
+        ],
+    },
+)
+EOL
+
+# Create a more thorough MANIFEST.in file
+cat > "$PKG_DIR/MANIFEST.in" << EOL
+include requirements.txt
+include pytest.ini
+recursive-include $PKG_NAME/static *
+include $PKG_NAME/*.py
+include $PKG_NAME/__init__.py
+EOL
+
+echo "Python package structure created successfully in the '$PKG_DIR' directory."
