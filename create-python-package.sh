@@ -44,7 +44,18 @@ fi
 if [ -f "backend/app.py" ]; then
   echo "Copying app.py from backend directory..."
   cp backend/app.py "$PACKAGE_DIR/src/app.py"
-  echo "app.py copied successfully from backend directory."
+  
+  # Check if app.py contains static file mounting code
+  if ! grep -q "app.mount(\"/\", StaticFiles" "$PACKAGE_DIR/src/app.py"; then
+    echo "Adding static file mounting code to app.py..."
+    # Append the static mounting code before the __main__ block
+    sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\'t exist")\n' "$PACKAGE_DIR/src/app.py"
+  fi
+  
+  # Make sure the port is 8000 in the __main__ block
+  sed -i 's/port=int(os.environ.get("PORT", [0-9]\+))/port=int(os.environ.get("PORT", 8000))/g' "$PACKAGE_DIR/src/app.py"
+  
+  echo "app.py copied and updated successfully from backend directory."
 else
   # Create app.py file in src directory
   echo "Creating default app.py in src directory..."
@@ -119,7 +130,7 @@ async def serve_spa(full_path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
 EOL
 fi
 
@@ -185,3 +196,5 @@ class TestApp(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 EOL
+
+echo "Python package structure created successfully in the '$PACKAGE_DIR' directory."

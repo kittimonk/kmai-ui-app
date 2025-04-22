@@ -33,4 +33,4 @@ python -m pytest tests/ -v
 # Optional: Start the application to verify it works
 # Uncomment these lines if you want the script to start the app
 # cd src
-# python -m uvicorn app:app --host 0.0.0.0 --port 3000
+# python -m uvicorn app:app --host 0.0.0.0 --port 8000
