@@ -4,6 +4,10 @@ set -e
 
 echo "Starting test-package.sh script"
 
+# Make sure setuptools is installed
+echo "Installing setuptools..."
+pip install setuptools wheel
+
 # Install test requirements first
 echo "Installing test requirements..."
 pip install -r test-requirements.txt
