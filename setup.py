@@ -2,6 +2,7 @@
 from setuptools import setup, find_packages
 import os
 from pathlib import Path
+import sys
 
 # The directory containing this file
 HERE = Path(__file__).parent
@@ -17,6 +18,9 @@ def read_requirements(filename):
     except FileNotFoundError:
         print(f"Warning: {filename} not found!")
     return requirements
+
+# Add the current directory to Python's path to help with imports during testing
+sys.path.insert(0, str(HERE))
 
 # Read requirements
 requires = read_requirements('requirements.txt')
@@ -40,4 +44,6 @@ setup(
             "kmai-ent03-ui-app=kmai_ent03_ui_app.app:app",
         ],
     },
+    # Configure test suite to help with python setup.py test command
+    test_suite="tests",
 )

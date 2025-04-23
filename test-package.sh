@@ -27,8 +27,16 @@ fi
 # Install the package in development mode to make imports work
 pip install -e .
 
-# Set the PYTHONPATH to include the current directory and run pytest
+# Add the current directory to PYTHONPATH to help with imports
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-python -m pytest tests/ -v
+
+# Use either pytest or unittest, depending on what's installed
+if command -v pytest &> /dev/null; then
+  echo "Running tests with pytest..."
+  python -m pytest tests/ -v
+else
+  echo "Running tests with unittest..."
+  python -m unittest discover tests
+fi
 
 echo "Package tests completed successfully!"
