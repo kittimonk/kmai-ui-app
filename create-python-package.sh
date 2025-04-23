@@ -16,9 +16,13 @@ echo "Building frontend assets..."
 npm ci
 npx vite build
 
-# Verify the build output
-if [ ! -d "static" ]; then
-  echo "ERROR: Static directory was not created by the build process."
+# Find the static directory from the most likely locations, prefer src/static
+if [ -d "src/static" ]; then
+  STATIC_SRC="src/static"
+elif [ -d "static" ]; then
+  STATIC_SRC="static"
+else
+  echo "ERROR: Static directory not found in either src/static or static."
   exit 1
 fi
 
@@ -32,15 +36,10 @@ mkdir -p "$PKG_DIR/tests"
 echo "# $PKG_NAME Python Application" > "$PKG_DIR/$PKG_NAME/__init__.py"
 echo "version = \"1.0.0\"" >> "$PKG_DIR/$PKG_NAME/__init__.py"
 
-# Copy static files
-echo "Copying static files..."
-if [ -d "static" ]; then
-  mkdir -p "$PKG_DIR/$PKG_NAME/static"
-  cp -r static/* "$PKG_DIR/$PKG_NAME/static/"
-  echo "Static files copied successfully."
-else
-  echo "Warning: static directory not found. This may cause issues."
-fi
+# Copy static files (using preferred source)
+echo "Copying static files from $STATIC_SRC..."
+cp -r "$STATIC_SRC/"* "$PKG_DIR/$PKG_NAME/static/"
+echo "Static files copied successfully."
 
 # Copy requirements.txt to package directory
 echo "Copying requirements.txt to package directory..."
