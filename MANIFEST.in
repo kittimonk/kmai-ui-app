@@ -1,10 +1,8 @@
 
 include requirements.txt
-include backend/requirements.txt
 include test-requirements.txt
 recursive-include kmai_ent03_ui_app/static *
 recursive-include static *
-recursive-include backend *
 include setup.py
 include pytest.ini
 include LICENSE
