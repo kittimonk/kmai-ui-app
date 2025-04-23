@@ -2,6 +2,9 @@
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
+# Enable debug output to see all commands being executed
+set -x
+
 echo "Creating Python package structure from existing application..."
 
 # Use the correct package directory and name
@@ -31,14 +34,18 @@ fi
 # Find the static directory from the most likely locations, prefer dist over src/static
 if [ -d "dist" ]; then
   STATIC_SRC="dist"
+  echo "Found static files in dist directory"
 elif [ -d "src/static" ]; then
   STATIC_SRC="src/static"
+  echo "Found static files in src/static directory"
 elif [ -d "static" ]; then
   STATIC_SRC="static"
+  echo "Found static files in static directory"
 else
   echo "WARNING: Static directory not found. Creating an empty one..."
   mkdir -p static
   STATIC_SRC="static"
+  echo "Created empty static directory"
 fi
 
 # Create Python package structure with src directory
@@ -62,6 +69,7 @@ else
   # Create a minimal index.html to prevent issues
   mkdir -p "$PKG_DIR/$PKG_NAME/static"
   echo "<html><body><h1>Placeholder</h1></body></html>" > "$PKG_DIR/$PKG_NAME/static/index.html"
+  echo "Created placeholder index.html"
 fi
 
 # Copy requirements.txt to package directory
@@ -78,11 +86,13 @@ python-jose>=3.3.0,<3.4.0
 requests>=2.31.0,<2.32.0
 python-multipart>=0.0.6,<0.1.0
 EOL
+  echo "Created basic requirements.txt"
 fi
 
 # Copy test requirements
 if [ -f "test-requirements.txt" ]; then
   cp test-requirements.txt "$PKG_DIR/"
+  echo "test-requirements.txt copied successfully."
 else
   echo "Creating test-requirements.txt..."
   cat > "$PKG_DIR/test-requirements.txt" << 'EOL'
@@ -90,12 +100,14 @@ pytest==8.0.0
 httpx==0.24.1
 pytest-asyncio==0.23.5
 EOL
+  echo "Created test-requirements.txt"
 fi
 
 # Copy app.py file from backend directory if it exists
 if [ -f "backend/app.py" ]; then
   echo "Copying app.py from backend directory..."
   cp backend/app.py "$PKG_DIR/$PKG_NAME/app.py"
+  echo "app.py copied successfully"
   
   # Check if app.py contains static file mounting code and add if missing
   if ! grep -q "app.mount(\"/\", StaticFiles" "$PKG_DIR/$PKG_NAME/app.py"; then
@@ -106,6 +118,7 @@ if [ -f "backend/app.py" ]; then
     fi
     # Append the static mounting code before the __main__ block
     sed -i '/if __name__ == "__main__":/i # Determine the static directory path\nstatic_dir = Path(__file__).parent / "static"\n# Mount static files - only if directory exists\nif static_dir.exists():\n    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")\n    print(f"Static files mounted from: {static_dir}")\nelse:\n    print("WARNING: Could not mount static files - directory doesn\\'"'"'t exist")\n' "$PKG_DIR/$PKG_NAME/app.py"
+    echo "Static mounting code added to app.py"
   fi
 else
   # Create app.py file in package directory
@@ -183,9 +196,11 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
 EOL
+  echo "Created default app.py"
 fi
 
 # Create a better test file that properly imports the app
+echo "Creating test files..."
 cat > "$PKG_DIR/tests/test_app.py" << EOL
 import os
 import sys
@@ -249,16 +264,20 @@ class TestApp(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 EOL
+echo "Created test_app.py"
 
 # Create a proper pytest.ini file to help configure tests
+echo "Creating pytest.ini..."
 cat > "$PKG_DIR/pytest.ini" << 'EOL'
 [pytest]
 testpaths = tests
 python_files = test_*.py
 python_functions = test_*
 EOL
+echo "Created pytest.ini"
 
 # Create a more thorough MANIFEST.in file
+echo "Creating MANIFEST.in..."
 cat > "$PKG_DIR/MANIFEST.in" << EOL
 include requirements.txt
 include test-requirements.txt
@@ -267,8 +286,10 @@ recursive-include ${PKG_NAME}/static *
 include ${PKG_NAME}/*.py
 include ${PKG_NAME}/__init__.py
 EOL
+echo "Created MANIFEST.in"
 
 # Create a good setup.py file that correctly includes package data
+echo "Creating setup.py..."
 cat > "$PKG_DIR/setup.py" << EOL
 from setuptools import setup, find_packages
 import os
@@ -312,6 +333,7 @@ setup(
     },
 )
 EOL
+echo "Created setup.py"
 
 echo "Python package structure created successfully in the '$PKG_DIR' directory."
 echo ""
@@ -321,6 +343,7 @@ echo "  pip install -e ."
 echo "  python -m uvicorn ${PKG_NAME}.app:app --reload"
 
 # Optional: generate a helpful README.md
+echo "Creating README.md..."
 cat > "$PKG_DIR/README.md" << EOL
 # KMAI UI App
 
@@ -328,21 +351,21 @@ A packaged Python application with a web UI.
 
 ## Installation
 
-```bash
+\`\`\`bash
 pip install -e .
-```
+\`\`\`
 
 ## Running the Application
 
-```bash
+\`\`\`bash
 python -m uvicorn ${PKG_NAME}.app:app --reload
-```
+\`\`\`
 
 ## Running Tests
 
-```bash
+\`\`\`bash
 pytest
-```
+\`\`\`
 
 ## Directory Structure
 
@@ -351,3 +374,9 @@ pytest
   - static/: Static files for the web UI
 - tests/: Test files
 EOL
+echo "Created README.md"
+
+# Turn off debug output
+set +x
+
+echo "Package creation completed successfully!"
