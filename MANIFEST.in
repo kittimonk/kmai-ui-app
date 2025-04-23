@@ -7,3 +7,5 @@ recursive-include static *
 recursive-include backend *
 include setup.py
 include pytest.ini
+include LICENSE
+include README.md

@@ -10,7 +10,7 @@ HERE = Path(__file__).parent
 def read_requirements(filename):
     requirements = []
     try:
-        with open(filename) as f:
+        with open(os.path.join(HERE, filename), 'r') as f:
             reqs = f.read().splitlines()
             for req in reqs:
                 if req.strip() and not req.startswith('#'):
@@ -18,9 +18,6 @@ def read_requirements(filename):
     except FileNotFoundError:
         print(f"Warning: {filename} not found!")
     return requirements
-
-# Add the current directory to Python's path to help with imports during testing
-sys.path.insert(0, str(HERE))
 
 # Read requirements
 requires = read_requirements('requirements.txt')
@@ -30,8 +27,10 @@ tests_requires = read_requirements('test-requirements.txt')
 setup(
     name="kmai-ent03-ui-app",
     version="1.0.6",
-    packages=find_packages(where="."),
-    package_dir={"": "."},
+    description="KMAI Enterprise UI Application",
+    author="KMAI Team",
+    author_email="info@kmai.ai",
+    packages=find_packages(exclude=["tests", "*.tests", "*.tests.*", "tests.*"]),
     include_package_data=True,
     python_requires=">=3.8",
     install_requires=requires,

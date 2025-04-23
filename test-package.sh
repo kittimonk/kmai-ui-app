@@ -4,9 +4,9 @@ set -e
 
 echo "Starting test-package.sh script"
 
-# Make sure setuptools is installed
-echo "Installing setuptools..."
-pip install setuptools wheel
+# Make sure setuptools and wheel are installed with the correct version
+echo "Installing setuptools and wheel..."
+pip install -U setuptools wheel
 
 # Install test requirements first
 echo "Installing test requirements..."
@@ -32,7 +32,7 @@ if [ ! -d "kmai_ent03_ui_app/static" ]; then
 fi
 
 echo "Checking if static directory has files..."
-if [ -z "$(ls -A kmai_ent03_ui_app/static)" ]; then
+if [ -z "$(ls -A kmai_ent03_ui_app/static 2>/dev/null)" ]; then
    echo "WARNING: kmai_ent03_ui_app/static directory is empty. This may cause issues."
 fi
 
