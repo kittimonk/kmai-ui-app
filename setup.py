@@ -29,8 +29,8 @@ tests_requires = read_requirements('test-requirements.txt')
 # This call to setup() does all the work
 setup(
     name="kmai-ent03-ui-app",
-    version="1.0.6",
-    packages=find_packages(where="."),
+    version="1.0.7",
+    packages=find_packages(include=['kmai_ent03_ui_app', 'kmai_ent03_ui_app.*']),
     package_dir={"": "."},
     include_package_data=True,
     python_requires=">=3.8",
