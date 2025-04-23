@@ -17,6 +17,7 @@ const Chat = () => {
     setIsLoading, 
     apiError, 
     setApiError, 
+    apiStatus,
     isLovablePreview, 
     retryApiConnection 
   } = useChatApi();

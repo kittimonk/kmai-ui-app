@@ -38,19 +38,14 @@ msi = DefaultAzureCredential()
 # Initialize FastAPI
 app = FastAPI()
 
-# Configure CORS
-origins = [
-    "http://localhost:3000",  # Alternative development port if needed
-    "http://localhost:8080",  # Alternative local development port
-    os.environ.get("WEBSITE_HOSTNAME", "*")  # Azure Web App hostname
-]
-
+# Configure CORS more explicitly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["*"],  # In production, you'd want to be more specific
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Function to get token for OpenAI
@@ -136,6 +131,13 @@ def health():
 @app.get("/api/health")
 def api_health():
     return {"status": "ok", "message": "API server is running"}
+
+# ----------------------------
+# Update for explicit API access from frontend
+# ----------------------------
+@app.options("/api/{rest_of_path:path}")
+async def options_route(rest_of_path: str):
+    return {}  # Enable CORS preflight for all /api routes
 
 # ----------------------------
 # CHAT ENDPOINTS
