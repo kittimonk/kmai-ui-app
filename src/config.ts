@@ -2,7 +2,7 @@
 // API configuration
 
 // For local development, use your local FastAPI server
-const LOCAL_API_URL = 'http://localhost:3000';
+const LOCAL_API_URL = 'http://localhost:8000';
 
 // For Azure Web App environment
 const AZURE_API_URL = '/api'; 
