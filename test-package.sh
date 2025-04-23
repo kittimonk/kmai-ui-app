@@ -1,7 +1,12 @@
+
 #!/bin/bash
 set -e
 
 echo "Starting test-package.sh script"
+
+# Make sure setuptools and wheel are installed and up-to-date
+echo "Installing setuptools and wheel..."
+pip install --upgrade setuptools wheel
 
 # Install test requirements first
 echo "Installing test requirements..."
