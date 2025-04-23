@@ -32,9 +32,6 @@ setup(
     include_package_data=True,
     python_requires=">=3.11",
     install_requires=requires,
-    cmdclass={
-        "test": lambda: None,  # Placeholder that won't actually run tests during setup.py test
-    },
     entry_points={
         "console_scripts": [
             "kmai-ent03-ui-app=kmai_ent03_ui_app.app:app",

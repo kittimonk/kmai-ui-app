@@ -156,38 +156,42 @@ if __name__ == "__main__":
 EOL
 fi
 
-# Create a test file that properly imports the app using the correct package name
+# Create a better test file that properly imports the app using the correct package name
 cat > "$PKG_DIR/tests/test_app.py" << EOL
 import os
 import unittest
 from pathlib import Path
-from $PKG_NAME.app import app
+from fastapi.testclient import TestClient
+
+# Try to import the app from the package
+try:
+    from $PKG_NAME.app import app
+except ImportError:
+    # If that fails, try a direct import (useful during development)
+    from app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
-        self.client = self._get_test_client()
-        # Ensure we're in the right directory for tests
+        self.client = TestClient(app)
+        # Find the project root directory
         self.package_dir = Path(__file__).parent.parent
         self.static_dir = self.package_dir / "$PKG_NAME" / "static"
-
-    def _get_test_client(self):
-        try:
-            from fastapi.testclient import TestClient
-            return TestClient(app)
-        except ImportError:
-            raise RuntimeError("fastapi.testclient is required for tests")
 
     def test_static_directory_exists(self):
         """Test that the static directory exists"""
         print(f"Checking static directory at: {self.static_dir}")
         self.assertTrue(self.static_dir.exists(), f"Static directory does not exist at {self.static_dir}")
+        # Check if static directory has files
+        self.assertTrue(any(self.static_dir.iterdir()), f"Static directory is empty at {self.static_dir}")
 
     def test_health_endpoint(self):
+        """Test the health check endpoint"""
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "healthy", "service": "kmai-app"})
 
     def test_api_health_endpoint(self):
+        """Test the API health check endpoint"""
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "message": "API server is running"})
@@ -207,61 +211,17 @@ EOL
 # Create __init__.py in tests directory to make it a proper package
 touch "$PKG_DIR/tests/__init__.py"
 
-# Create a robust setup.py using PKG_NAME
-cat > "$PKG_DIR/setup.py" << EOL
-from setuptools import setup, find_packages
-import os
-from pathlib import Path
-
-# The directory containing this file
-HERE = Path(__file__).parent
-
-def read_requirements(filename='requirements.txt'):
-    requirements = []
-    try:
-        with open(filename) as f:
-            reqs = f.read().splitlines()
-            for req in reqs:
-                if req.strip() and not req.startswith('#'):
-                    requirements.append(req)
-    except FileNotFoundError:
-        # Fallback to basic dependencies if requirements.txt is not found
-        print(f"WARNING: {filename} not found, using default dependencies")
-        return [
-            "fastapi>=0.109.0,<0.110.0",
-            "uvicorn>=0.27.0,<0.28.0",
-            "python-jose>=3.3.0,<3.4.0",
-            "requests>=2.31.0,<2.32.0",
-            "python-multipart>=0.0.6,<0.1.0"
-        ]
-    return requirements
-
-# Read requirements
-requires = read_requirements()
-
-# This call to setup() does all the work
-setup(
-    name="$PKG_NAME",
-    version="1.0.0",
-    packages=find_packages(where="."),
-    package_dir={"": "."},
-    include_package_data=True,
-    python_requires=">=3.11",
-    install_requires=requires,
-    cmdclass={
-        "test": lambda: None,  # Placeholder that won't run tests during setup.py test
-    },
-    entry_points={
-        "console_scripts": [
-            "$PKG_NAME=$PKG_NAME.app:app",
-        ],
-    },
-)
+# Update test-requirements.txt
+cat > "$PKG_DIR/test-requirements.txt" << 'EOL'
+pytest==8.0.0
+httpx==0.24.1
+pytest-asyncio==0.23.5
 EOL
 
 # Create a more thorough MANIFEST.in file
 cat > "$PKG_DIR/MANIFEST.in" << EOL
 include requirements.txt
+include test-requirements.txt
 include pytest.ini
 recursive-include $PKG_NAME/static *
 include $PKG_NAME/*.py
@@ -269,3 +229,7 @@ include $PKG_NAME/__init__.py
 EOL
 
 echo "Python package structure created successfully in the '$PKG_DIR' directory."
+echo "To install and use this package:"
+echo "  cd $PKG_DIR"
+echo "  pip install -e ."
+echo "  python -m uvicorn $PKG_NAME.app:app --reload"

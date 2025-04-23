@@ -27,10 +27,11 @@ fi
 # Install the package in development mode
 pip install -e .
 
-# Run the tests
+# Run pytest directly instead of through setup.py
 python -m pytest tests/ -v
+
+echo "Package tests completed successfully!"
 
 # Optional: Start the application to verify it works
 # Uncomment these lines if you want the script to start the app
 # python -m uvicorn kmai_ent03_ui_app.app:app --host 0.0.0.0 --port 8000
-
