@@ -33,3 +33,4 @@ python -m pytest tests/ -v
 # Optional: Start the application to verify it works
 # Uncomment these lines if you want the script to start the app
 # python -m uvicorn kmai_ent03_ui_app.app:app --host 0.0.0.0 --port 8000
+

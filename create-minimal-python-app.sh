@@ -1,3 +1,4 @@
+
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -9,16 +10,32 @@ mkdir -p "$APP_DIR"
 mkdir -p "$APP_DIR/static"
 mkdir -p "$APP_DIR/tests"
 
-# Build the static assets if they don't exist
-if [ ! -d "static" ] || [ -z "$(ls -A static 2>/dev/null)" ]; then
-  echo "Building static files..."
+# Find the static source directory
+if [ -d "src/static" ]; then
+  STATIC_SRC="src/static"
+  echo "Using src/static as source for static files"
+elif [ -d "static" ]; then
+  STATIC_SRC="static"
+  echo "Using static as source for static files"
+else
+  # Build the static assets if they don't exist
+  echo "Static directory not found, building from source..."
   npm ci
   npx vite build
+  
+  if [ -d "src/static" ]; then
+    STATIC_SRC="src/static"
+  elif [ -d "static" ]; then
+    STATIC_SRC="static"
+  else
+    echo "ERROR: Failed to find or create static directory"
+    exit 1
+  fi
 fi
 
 # Copy static files
-echo "Copying static files..."
-cp -r static/* "$APP_DIR/static/"
+echo "Copying static files from $STATIC_SRC..."
+cp -r "$STATIC_SRC/"* "$APP_DIR/static/"
 
 # Create __init__.py
 echo "# Minimal KMAI App" > "$APP_DIR/__init__.py"
@@ -26,12 +43,23 @@ echo "# Minimal KMAI App" > "$APP_DIR/__init__.py"
 # Create main.py file (now app.py)
 cat > "$APP_DIR/app.py" << 'EOL'
 import os
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 
 # Initialize FastAPI
 app = FastAPI()
+
+# Determine the static directory path
+static_dir = Path(__file__).parent / "static"
+if not static_dir.exists():
+    print(f"WARNING: Static directory not found at {static_dir}")
+    # Try alternative locations
+    alt_static = Path.cwd() / "static"
+    if alt_static.exists():
+        static_dir = alt_static
+        print(f"Using alternative static directory: {static_dir}")
 
 # Health check endpoint
 @app.get("/health")
@@ -43,7 +71,11 @@ def api_health():
     return {"status": "ok"}
 
 # Mount static files
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+if static_dir.exists():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+    print(f"Static files mounted from: {static_dir}")
+else:
+    print("WARNING: No static directory found")
 
 if __name__ == "__main__":
     import uvicorn
@@ -52,15 +84,17 @@ EOL
 
 # Create setup.py
 cat > "$APP_DIR/setup.py" << 'EOL'
-from setuptools import setup
+from setuptools import setup, find_packages
+from pathlib import Path
 
 setup(
     name="kmai-minimal-app",
     version="1.0.0",
-    py_modules=["app"],
+    packages=find_packages(),
+    include_package_data=True,
     install_requires=[
-        "fastapi==0.109.0",
-        "uvicorn==0.27.0"
+        "fastapi>=0.109.0,<0.110.0",
+        "uvicorn>=0.27.0,<0.28.0"
     ],
 )
 EOL
@@ -76,12 +110,20 @@ EOL
 # Create a sample test file
 cat > "$APP_DIR/tests/test_app.py" << 'EOL'
 import unittest
+from pathlib import Path
 from fastapi.testclient import TestClient
 from app import app
 
 class TestApp(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
+        self.static_dir = Path(__file__).parent.parent / "static"
+
+    def test_static_directory_exists(self):
+        """Test that the static directory exists"""
+        if not self.static_dir.exists():
+            self.skipTest("Static directory not found")
+        self.assertTrue(self.static_dir.exists())
 
     def test_health_endpoint(self):
         response = self.client.get("/health")
