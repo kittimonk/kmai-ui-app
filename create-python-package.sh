@@ -319,7 +319,7 @@ setup(
     name="kmai-ent03-ui-app",
     version="1.0.6",
     packages=find_packages(where="."),
-    python_requires=">=3.8",
+    python_requires=">=3.11",
     install_requires=requires,
     tests_require=tests_requires,
     package_data={
