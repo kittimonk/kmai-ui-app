@@ -1,8 +1,9 @@
 
 include requirements.txt
 include backend/requirements.txt
-recursive-include src/static *
+include test-requirements.txt
+recursive-include kmai_ent03_ui_app/static *
 recursive-include static *
 recursive-include backend *
 include setup.py
-include test-requirements.txt
+include pytest.ini

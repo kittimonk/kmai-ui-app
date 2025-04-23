@@ -21,7 +21,6 @@ def read_requirements(filename):
 # Read requirements
 requires = read_requirements('requirements.txt')
 tests_requires = read_requirements('test-requirements.txt')
-requires.extend(tests_requires)
 
 # This call to setup() does all the work
 setup(
@@ -30,8 +29,12 @@ setup(
     packages=find_packages(where="."),
     package_dir={"": "."},
     include_package_data=True,
-    python_requires=">=3.11",
+    python_requires=">=3.8",
     install_requires=requires,
+    tests_require=tests_requires,
+    package_data={
+        "kmai_ent03_ui_app": ["static/*", "static/**/*"],
+    },
     entry_points={
         "console_scripts": [
             "kmai-ent03-ui-app=kmai_ent03_ui_app.app:app",

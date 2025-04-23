@@ -24,14 +24,11 @@ if [ -z "$(ls -A kmai_ent03_ui_app/static)" ]; then
    echo "WARNING: kmai_ent03_ui_app/static directory is empty. This may cause issues."
 fi
 
-# Install the package in development mode
+# Install the package in development mode to make imports work
 pip install -e .
 
-# Run pytest directly instead of through setup.py
+# Set the PYTHONPATH to include the current directory and run pytest
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 python -m pytest tests/ -v
 
 echo "Package tests completed successfully!"
-
-# Optional: Start the application to verify it works
-# Uncomment these lines if you want the script to start the app
-# python -m uvicorn kmai_ent03_ui_app.app:app --host 0.0.0.0 --port 8000
