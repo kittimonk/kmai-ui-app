@@ -1,7 +1,7 @@
 import asyncio
 import os, subprocess, time
 import pyodbc, redis
-from azure.identity import ManagedIdentityCredential, DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from openai import AzureOpenAI
@@ -64,10 +64,11 @@ app.add_middleware(
 #     msi = DefaultAzureCredential()
 
 # Initialize OpenAI client
-client = openai.AzureOpenAI(
+# Modified to use API key authentication for local development
+client = AzureOpenAI(
     azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
     api_version=openai_api_version,
-    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
+    api_key=os.environ.get("AZURE_OPENAI_API_KEY", "your-api-key-here")  # Use API key authentication instead of token provider
 )
 
 # Initialize search client
@@ -403,6 +404,7 @@ Rewrite the remediation plan in a clear, structured format.
 static_dir = Path(__file__).parent / "static"
 #Mount static files - only if directory exists
 if static_dir.exists():
+    from fastapi.staticfiles import StaticFiles
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
     print(f"Static files mounted from: {static_dir}")
 else:
