@@ -2,7 +2,6 @@
 from setuptools import setup, find_packages
 import os
 from pathlib import Path
-import sys
 
 # The directory containing this file
 HERE = Path(__file__).parent
@@ -23,7 +22,6 @@ def read_requirements(filename):
 requires = read_requirements('requirements.txt')
 tests_requires = read_requirements('test-requirements.txt')
 
-# This call to setup() does all the work
 setup(
     name="kmai-ent03-ui-app",
     version="1.0.6",
