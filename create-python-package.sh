@@ -3,7 +3,7 @@
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Enable debug output to see all commands being executed
-set -x
+# set -x
 
 echo "Creating Python package structure from existing application..."
 
