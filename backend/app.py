@@ -53,22 +53,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Azure authentication - works both locally and in Azure
-# try:
-#     # Try Managed Identity first (for Azure deployment)
-#     msi = ManagedIdentityCredential(client_id=None if os.getenv("WEBSITE_INSTANCE_ID") else client_id)
-#     # Test the credential to see if it works
-#     msi.get_token("https://management.azure.com/.default")
-# except Exception:
-#     # Fall back to Default Azure Credential for local development
-#     msi = DefaultAzureCredential()
+# Function to get token for OpenAI
+def get_bearer_token_provider(credential, scope):
+    def get_token():
+        token = credential.get_token(scope)
+        return token.token
+    return get_token
 
-# Initialize OpenAI client
-# Modified to use API key authentication for local development
+# Initialize OpenAI client with token provider
 client = AzureOpenAI(
     azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
     api_version=openai_api_version,
-    api_key=os.environ.get("AZURE_OPENAI_API_KEY", "your-api-key-here")  # Use API key authentication instead of token provider
+    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
 )
 
 # Initialize search client
