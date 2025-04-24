@@ -6,8 +6,8 @@ from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 # from openai import AzureOpenAI
 # from azure.search.documents.indexes import SearchIndexClient
-from azure.search.documents.indexes.models import SearchIndex, SimpleField
-from azure.search.documents import SearchClient
+#from azure.search.documents.indexes.models import SearchIndex, SimpleField
+#from azure.search.documents import SearchClient
 from pydantic import BaseModel
 import requests
 import httpx
