@@ -263,6 +263,18 @@ class TestApp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+#import pytest
+#from fastapi.testclient import TestClient
+#from kmai_ent03_ui_app.app import app  # Import the FastAPI app from your main module
+
+#client = TestClient(app)
+
+#def test_placeholder():
+    # Test a non-existent route (e.g., '/nonexistent')
+#    response = client.get("/nonexistent") # A FET request to a non-existent endpoint
+#    assert response.status_code == 404 # Ensure the status code is 404 (Not Found)
+    
 EOL
 echo "Created test_app.py"
 
@@ -291,7 +303,9 @@ echo "Created MANIFEST.in"
 # Create a good setup.py file that correctly includes package data
 echo "Creating setup.py..."
 cat > "$PKG_DIR/setup.py" << EOL
-from setuptools import setup, find_packages
+#!/usr/bin/env python
+
+from setuptools import setup, find_packages #, Command
 import os
 from pathlib import Path
 
@@ -310,26 +324,53 @@ def read_requirements(filename):
         print(f"Warning: {filename} not found!")
     return requirements
 
+#class PyTestCommand(Command):
+#    description = "Run tests with pytest"
+#    user_options = []
+
+#    def initialize_options(self):
+#        pass
+
+#    def finalize_options(self):
+#        pass
+
+#    def run(self):
+#        # Import here so that setup.py doesn't need pytest unless you actually run tests
+#        import pytest
+
+#        errno = pytest.main(["--maxfail=1", "--disable-warnings", "tests"])
+#        raise SystemExit(errno)
+
 # Read requirements
 requires = read_requirements('requirements.txt')
 tests_requires = read_requirements('test-requirements.txt')
+#requires.extend(tests_requires)
 
 # This call to setup() does all the work
 setup(
     name="kmai-ent03-ui-app",
     version="1.0.6",
     packages=find_packages(where="."),
+#    packages=find_packages(where="kmai_ent03_ui_app"), # FInd packages in the 'kmai_ent03_ui_app' directory
+#    package_dir={"": "kmai_ent03_ui_app"}, # Set the base directory for packages to 'kmai_ent03_ui_app'      
     python_requires=">=3.10",
     install_requires=requires,
-    tests_require=tests_requires,
+#   tests_require=tests_requires,
     package_data={
         "${PKG_NAME}": ["static/*", "static/**/*"],
     },
     include_package_data=True,
+#    cmdclass={
+#        "test": PyTestCommand, # override the old 'test' command
+#    },
     entry_points={
         "console_scripts": [
             "kmai-ent03-ui-app=${PKG_NAME}.app:app",
-        ],
+        ]
+#    entry_points={
+#        "console_scripts": [
+#            "runserver=app:app",
+#        ]     
     },
 )
 EOL
