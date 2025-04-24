@@ -207,6 +207,7 @@ import sys
 import unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
+from kmai_ent03_ui_app import app
 
 # Add the parent directory to the Python path to make imports work
 parent_dir = Path(__file__).parent.parent
@@ -219,7 +220,7 @@ try:
 except ImportError:
     try:
         # Try the direct import if we're in the package directory itself
-        from app import app  
+        from ${PKG_NAME}.app import app  
     except ImportError:
         raise ImportError("Could not import app from any expected location")
 
