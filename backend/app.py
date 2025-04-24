@@ -1,7 +1,7 @@
 import asyncio
 import os, subprocess, time
 import pyodbc, redis
-from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential, DefaultAzureCredential, get_bearer_token_provider
 from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from openai import AzureOpenAI
@@ -13,6 +13,8 @@ import requests
 import httpx
 import openai
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi import Request, Form, FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Optional
