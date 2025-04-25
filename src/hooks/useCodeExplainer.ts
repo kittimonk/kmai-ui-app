@@ -82,22 +82,25 @@ export const useCodeExplainer = () => {
     
     try {
       if (state.apiStatus === 'available') {
-        // Try to make a real API call
+        // Try to make a real API call to the code-explainer endpoint
         try {
-          const response = await fetch(`${API_BASE_URL}/chat/`, {
+          const response = await fetch(`${API_BASE_URL}/code-explainer/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              prompt: `${state.selectedAction.toUpperCase()}: ${state.code}`,
-              max_tokens: 1000
+              code: state.code,
+              action: state.selectedAction,
+              max_tokens: 1000,
+              user_id: 'web-user', // You can replace with actual user ID if available
+              session_id: localStorage.getItem('session_id') || crypto.randomUUID()
             }),
           });
           
           if (response.ok) {
-            const data = await response.json();
-            setState(prev => ({ ...prev, result: data.choices[0].message.content, isGenerating: false }));
+            const result = await response.text();
+            setState(prev => ({ ...prev, result, isGenerating: false }));
           } else {
             throw new Error('API response was not OK');
           }

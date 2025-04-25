@@ -69,6 +69,44 @@ def initialize_chat_history_table():
     finally:
         conn.close()
 
+def initialize_feature_interaction_table():
+    """Create the feature_interactions table if it doesn't exist."""
+    conn = get_db_connection()
+    if not conn:
+        logger.warning("Failed to initialize feature interaction table: No database connection")
+        return False
+
+    try:
+        cursor = conn.cursor()
+        
+        # Check if the table exists first
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'feature_interactions')
+        BEGIN
+            CREATE TABLE feature_interactions (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                user_id NVARCHAR(255),
+                feature_type NVARCHAR(100),
+                input_data NVARCHAR(MAX),
+                output_data NVARCHAR(MAX),
+                timestamp DATETIME2 DEFAULT GETDATE(),
+                session_id NVARCHAR(255),
+                endpoint_used NVARCHAR(255),
+                processing_time FLOAT,
+                tokens_used INT,
+                metadata NVARCHAR(MAX)
+            )
+        END
+        """)
+        conn.commit()
+        logger.info("Feature interaction table initialization completed")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing feature interaction table: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
 def log_chat_interaction(user_id: str, user_message: str, ai_response: str, 
                          endpoint_used: str = None, processing_time: float = 0.0, 
                          tokens_used: int = 0, session_id: str = None, metadata: Dict = None):
@@ -94,6 +132,35 @@ def log_chat_interaction(user_id: str, user_message: str, ai_response: str,
         return True
     except Exception as e:
         logger.error(f"Error logging chat interaction: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
+def log_feature_interaction(user_id: str, feature_type: str, input_data: str, output_data: str, 
+                           endpoint_used: str = None, processing_time: float = 0.0, 
+                           tokens_used: int = 0, session_id: str = None, metadata: Dict = None):
+    """Log a feature interaction to the database."""
+    conn = get_db_connection()
+    if not conn:
+        logger.warning(f"Failed to log {feature_type} interaction: No database connection")
+        return False
+
+    try:
+        cursor = conn.cursor()
+        metadata_str = str(metadata) if metadata else None
+        
+        # Insert the feature interaction into the database
+        cursor.execute("""
+        INSERT INTO feature_interactions 
+        (user_id, feature_type, input_data, output_data, endpoint_used, processing_time, tokens_used, session_id, metadata) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, feature_type, input_data, output_data, endpoint_used, processing_time, tokens_used, session_id, metadata_str))
+        
+        conn.commit()
+        logger.info(f"{feature_type} interaction logged for user {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error logging {feature_type} interaction: {str(e)}")
         return False
     finally:
         conn.close()
@@ -124,6 +191,41 @@ def get_user_chat_history(user_id: str, limit: int = 50) -> List[Dict]:
     finally:
         conn.close()
 
-# Initialize the table when the module is imported
+def get_user_feature_history(user_id: str, feature_type: str = None, limit: int = 50) -> List[Dict]:
+    """Get a user's feature interaction history."""
+    conn = get_db_connection()
+    if not conn:
+        logger.warning("Failed to get user feature history: No database connection")
+        return []
+
+    try:
+        cursor = conn.cursor(as_dict=True)
+        
+        # Get the user's feature history, optionally filtered by feature type
+        if feature_type:
+            cursor.execute("""
+            SELECT TOP %d id, feature_type, input_data, output_data, timestamp, endpoint_used
+            FROM feature_interactions
+            WHERE user_id = %s AND feature_type = %s
+            ORDER BY timestamp DESC
+            """, (limit, user_id, feature_type))
+        else:
+            cursor.execute("""
+            SELECT TOP %d id, feature_type, input_data, output_data, timestamp, endpoint_used
+            FROM feature_interactions
+            WHERE user_id = %s
+            ORDER BY timestamp DESC
+            """, (limit, user_id))
+        
+        history = cursor.fetchall()
+        return history
+    except Exception as e:
+        logger.error(f"Error getting user feature history: {str(e)}")
+        return []
+    finally:
+        conn.close()
+
+# Initialize the tables when the module is imported
 # Comment this out if you want to manually control initialization
 # initialize_chat_history_table()
+# initialize_feature_interaction_table()

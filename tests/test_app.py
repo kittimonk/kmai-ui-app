@@ -11,7 +11,8 @@ if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
 # Import from kmai_ent03_ui_app package
-from kmai_ent03_ui_app.app import app
+from backend.app import app
+from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
 
 class TestApp(unittest.TestCase):
     def setUp(self):
@@ -53,15 +54,3 @@ class TestApp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-#import pytest
-#from fastapi.testclient import TestClient
-#from kmai_ent03_ui_app.app import app  # Import the FastAPI app from your main module
-
-#client = TestClient(app)
-
-#def test_placeholder():
-    # Test a non-existent route (e.g., '/nonexistent')
-#    response = client.get("/nonexistent") # A FET request to a non-existent endpoint
-#    assert response.status_code == 404 # Ensure the status code is 404 (Not Found)

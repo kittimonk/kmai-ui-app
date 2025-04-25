@@ -1,3 +1,4 @@
+
 import asyncio
 import os, subprocess, time
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
@@ -25,8 +26,11 @@ import time
 # Import our database module
 from backend.database import (
     initialize_chat_history_table, 
+    initialize_feature_interaction_table,
     log_chat_interaction, 
-    get_user_chat_history
+    log_feature_interaction,
+    get_user_chat_history,
+    get_user_feature_history
 )
 
 # Azure Configuration
@@ -128,10 +132,11 @@ def optimize_content_for_tokens(content, max_length=10000):
     end = content[-half_max:]
     return f"{beginning}\n\n[...{len(content) - max_length} characters truncated...]\n\n{end}"
 
-# Initialize the database table
+# Initialize the database tables
 @app.on_event("startup")
 async def startup_db_client():
     initialize_chat_history_table()
+    initialize_feature_interaction_table()
 
 # Function to get user ID from request
 def get_user_id(
@@ -165,7 +170,7 @@ async def options_route(rest_of_path: str):
     return {}  # Enable CORS preflight for all /api routes
 
 # ----------------------------
-# CHAT HISTORY ENDPOINTS
+# HISTORY ENDPOINTS
 # ----------------------------
 @app.get("/api/chat/history")
 async def get_chat_history(user_info: dict = Depends(get_user_id)):
@@ -174,6 +179,18 @@ async def get_chat_history(user_info: dict = Depends(get_user_id)):
         return JSONResponse(content={"error": "User ID required"}, status_code=400)
     
     history = get_user_chat_history(user_id)
+    return {"history": history}
+
+@app.get("/api/feature/history")
+async def get_feature_history(
+    feature_type: Optional[str] = None, 
+    user_info: dict = Depends(get_user_id)
+):
+    user_id = user_info.get("user_id")
+    if user_id == "anonymous":
+        return JSONResponse(content={"error": "User ID required"}, status_code=400)
+    
+    history = get_user_feature_history(user_id, feature_type)
     return {"history": history}
 
 # ----------------------------
@@ -294,19 +311,55 @@ async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id))
 @app.post("/converter/")
 async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     print("Converter request message:", request.message)
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
+    start_time = time.time()
+    
     system_prompt = "You are an expert in converting legacy COBOL code to modern Python Code."
     user_prompt = f"Convert the following COBOL code to Python code:\n{request.message}"
     
-    response = await client.chat.completions.create(
-        model="gpt-4o-2024-05-13-tpm",
-        temperature=0.3,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        stream=False
-    )
-    return {"response": response.choices[0].message.content}
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-2024-05-13-tpm",
+            temperature=0.3,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream=False
+        )
+        
+        output_response = response.choices[0].message.content
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log feature interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="code_converter",
+            input_data=request.message,
+            output_data=output_response,
+            endpoint_used="/converter",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id
+        )
+        
+        return {"response": output_response}
+    except Exception as e:
+        print(f"Error in code converter: {str(e)}")
+        # Log failed interactions
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="code_converter",
+            input_data=request.message,
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/converter",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # ----------------------------
 # CODE EXPLAINER ENDPOINT
@@ -315,10 +368,17 @@ class CodeExplainRequest(BaseModel):
     code: str
     action: str = "explain"
     max_tokens: int = 300
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 @app.post("/code-explainer/")
 async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(get_user_id)):
     print("Received code explain request for action:", request.action)
+    
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
+    start_time = time.time()
+    
     if request.action == "simplify":
         system_prompt = "You are a senior software engineer who simplifies complex code without changing functionality."
         user_prompt = f"Simplify this code:\n{request.code}"
@@ -339,16 +399,107 @@ async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(
         user_prompt = f"Explain the following code:\n{request.code}"
         temperature = 0.5
 
-    response = await client.chat.completions.create(
-        model=openai_lang_model,
-        temperature=temperature,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        stream=False
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = await client.chat.completions.create(
+            model=openai_lang_model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream=False
+        )
+        
+        output_response = response.choices[0].message.content.strip()
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log feature interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type=f"code_explainer_{request.action}",
+            input_data=request.code,
+            output_data=output_response,
+            endpoint_used="/code-explainer",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id
+        )
+        
+        return output_response
+    except Exception as e:
+        print(f"Error in code explainer: {str(e)}")
+        # Log failed interactions
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type=f"code_explainer_{request.action}",
+            input_data=request.code,
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/code-explainer",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+
+# ----------------------------
+# KNOWLEDGE BASE ENDPOINT
+# ----------------------------
+class KnowledgeBaseRequest(BaseModel):
+    message: str
+    max_tokens: int = 1000
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+@app.post("/api/knowledge-base/query")
+async def query_knowledge_base(request: KnowledgeBaseRequest, user_info: dict = Depends(get_user_id)):
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
+    start_time = time.time()
+    
+    try:
+        # Generate embeddings for the query
+        embedding = await generate_embedding(request.message)
+        
+        # Use the embeddings to search the knowledge base
+        loop = asyncio.get_running_loop()
+        search_results = await loop.run_in_executor(None, fetch_vector_search_results, embedding)
+        
+        # Format and return the results
+        output_response = {
+            "query": request.message,
+            "results": search_results
+        }
+        
+        processing_time = time.time() - start_time
+        
+        # Log the knowledge base query
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="knowledge_base",
+            input_data=request.message,
+            output_data=str(search_results),
+            endpoint_used="/api/knowledge-base/query",
+            processing_time=processing_time,
+            session_id=session_id,
+            metadata={"result_count": len(search_results)}
+        )
+        
+        return output_response
+    except Exception as e:
+        print(f"Error in knowledge base query: {str(e)}")
+        # Log failed interactions
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="knowledge_base",
+            input_data=request.message,
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/api/knowledge-base/query",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # ----------------------------
 # Archer / Remediation Endpoints
@@ -356,6 +507,8 @@ async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(
 class ArcherRequest(BaseModel):
     prompt: str
     max_tokens: int = 100
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 def ignore_rtf_to_text(rtf_content):
     text = re.sub(r'^\{\\rtf1.*\}\s*', '', rtf_content)
@@ -381,7 +534,9 @@ async def process_remediation_files(
     remediationPlan_content: Optional[str] = Form(None),
     complianceRequirements_content: Optional[str] = Form(None),
     findingsDetails_content: Optional[str] = Form(None),
-    customPrompt: Optional[str] = Form(None)
+    customPrompt: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None)
 ):
     if not any([
         remediationPlan, complianceRequirements, findingsDetails,
@@ -389,6 +544,13 @@ async def process_remediation_files(
     ]):
         raise HTTPException(status_code=400, detail="No files or content were provided")
 
+    # If no user_id provided in form, get from header
+    if not user_id or not session_id:
+        user_info = get_user_id()
+        user_id = user_id or user_info.get("user_id")
+        session_id = session_id or user_info.get("session_id")
+    
+    start_time = time.time()
     file_contents = {}
 
     if remediationPlan_content:
@@ -457,22 +619,61 @@ Return the response with clear sections for:
             stream=False
         )
         reply_content = response.choices[0].message.content.strip()
+        
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log feature interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_analysis",
+            input_data=f"Remediation plan analysis with {len(file_contents)} documents",
+            output_data=reply_content,
+            endpoint_used="/archer",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id,
+            metadata={"file_types": list(file_contents.keys())}
+        )
+        
         return JSONResponse(content={"response": reply_content})
     except Exception as e:
         print(f"Error calling OpenAI: {str(e)}")
+        # Log failed interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_analysis",
+            input_data=f"Remediation plan analysis with {len(file_contents)} documents",
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/archer",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e), "file_types": list(file_contents.keys())}
+        )
         raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
 
 @app.post("/archer/rewrite")
 async def rewrite_remediation(
     remediationPlan: UploadFile = File(...),
     analysisContext: str = Form(...),
-    action: str = Form(...)
+    action: str = Form(...),
+    user_id: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None)
 ):
     if action != "rewrite":
         return JSONResponse(
             status_code=400,
             content={"error": f"Invalid action: {action}. Expected 'rewrite'"}
         )
+        
+    # If no user_id provided in form, get from header
+    if not user_id or not session_id:
+        user_info = get_user_id()
+        user_id = user_id or user_info.get("user_id")
+        session_id = session_id or user_info.get("session_id")
+    
+    start_time = time.time()
+    
     content = await remediationPlan.read()
     file_content = content.decode("utf-8")
     if remediationPlan.filename.lower().endswith('.rtf'):
@@ -483,21 +684,52 @@ You are a compliance expert tasked with improving a remediation plan based on an
 Consider compliance requirements, timelines, accountability, and validation steps.
 Rewrite the remediation plan in a clear, structured format.
 """
-    response = await client.chat.completions.create(
-        model="gpt-4o-2024-05-13-tpm",
-        temperature=0.7,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Here is the original remediation plan:\n\n{optimized_plan}\n\nHere is the analysis feedback:\n\n{analysisContext}\n\nPlease rewrite the remediation plan to address all issues."}
-        ],
-        stream=False
-    )
-    rewritten_plan = response.choices[0].message.content
-    return {
-        "rewrittenPlan": rewritten_plan,
-        "originalLength": len(file_content),
-        "rewrittenLength": len(rewritten_plan)
-    }
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-2024-05-13-tpm",
+            temperature=0.7,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the original remediation plan:\n\n{optimized_plan}\n\nHere is the analysis feedback:\n\n{analysisContext}\n\nPlease rewrite the remediation plan to address all issues."}
+            ],
+            stream=False
+        )
+        rewritten_plan = response.choices[0].message.content
+        
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log feature interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_rewrite",
+            input_data=f"Original plan: {optimized_plan[:200]}... + Analysis context",
+            output_data=rewritten_plan,
+            endpoint_used="/archer/rewrite",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id
+        )
+        
+        return {
+            "rewrittenPlan": rewritten_plan,
+            "originalLength": len(file_content),
+            "rewrittenLength": len(rewritten_plan)
+        }
+    except Exception as e:
+        print(f"Error in remediation rewrite: {str(e)}")
+        # Log failed interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_rewrite",
+            input_data=f"Original plan + Analysis context",
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/archer/rewrite",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
 
 #Determine the static directory path
 static_dir = Path(__file__).parent / "static"
