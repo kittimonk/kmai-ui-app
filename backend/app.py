@@ -1,12 +1,9 @@
 import asyncio
 import os, subprocess, time
-# import pyodbc, redis
-from azure.identity import ManagedIdentityCredential, DefaultAzureCredential #, get_bearer_token_provider
+from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from openai import AzureOpenAI
-# from azure.search.documents.indexes import SearchIndexClient
-#from azure.search.documents.indexes.models import SearchIndex, SimpleField
 from azure.search.documents import SearchClient
 from pydantic import BaseModel
 import requests
@@ -15,13 +12,22 @@ import openai
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi import Request, Form, FastAPI, HTTPException, UploadFile, File
+from fastapi import Request, Form, FastAPI, HTTPException, UploadFile, File, Depends, Header
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Optional
 import re
 import json
+import uuid
 from striprtf.striprtf import rtf_to_text
 from pathlib import Path
+import time
+
+# Import our database module
+from backend.database import (
+    initialize_chat_history_table, 
+    log_chat_interaction, 
+    get_user_chat_history
+)
 
 # Azure Configuration
 subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "210da3-aff")
@@ -77,6 +83,8 @@ search_client = SearchClient(
 class ChatRequest(BaseModel):
     message: str  # Changed from 'prompt' to 'message' to match frontend
     max_tokens: int = 10000
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 # ----------------------------
 # Utility Functions
@@ -120,6 +128,21 @@ def optimize_content_for_tokens(content, max_length=10000):
     end = content[-half_max:]
     return f"{beginning}\n\n[...{len(content) - max_length} characters truncated...]\n\n{end}"
 
+# Initialize the database table
+@app.on_event("startup")
+async def startup_db_client():
+    initialize_chat_history_table()
+
+# Function to get user ID from request
+def get_user_id(
+    x_user_id: Optional[str] = Header(None),
+    x_session_id: Optional[str] = Header(None)
+):
+    """Extract user ID from header or generate a temporary one"""
+    user_id = x_user_id or "anonymous"
+    session_id = x_session_id or str(uuid.uuid4())
+    return {"user_id": user_id, "session_id": session_id}
+
 # ----------------------------
 # HEALTH CHECK ENDPOINTS
 # ----------------------------
@@ -142,58 +165,134 @@ async def options_route(rest_of_path: str):
     return {}  # Enable CORS preflight for all /api routes
 
 # ----------------------------
+# CHAT HISTORY ENDPOINTS
+# ----------------------------
+@app.get("/api/chat/history")
+async def get_chat_history(user_info: dict = Depends(get_user_id)):
+    user_id = user_info.get("user_id")
+    if user_id == "anonymous":
+        return JSONResponse(content={"error": "User ID required"}, status_code=400)
+    
+    history = get_user_chat_history(user_id)
+    return {"history": history}
+
+# ----------------------------
 # CHAT ENDPOINTS
 # ----------------------------
 @app.post("/chat/context")
-async def chat_context(request: ChatRequest):
+async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     user_prompt = request.message
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
+    
+    start_time = time.time()
     print("Context chat request:", user_prompt)
-    embedding = await generate_embedding(user_prompt)
-    loop = asyncio.get_running_loop()
-    matched_docs = await loop.run_in_executor(None, fetch_vector_search_results, embedding)
-    context_chunks = [doc["content"] for doc in matched_docs]
-    context = "\n\n".join(context_chunks)
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant from Enterprise Data Product Team. Answer a summary only based on the provided context from the Data Products (DP) Documents."},
-        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {user_prompt}"}
-    ]
-    print("Context messages:", messages)
-    response = await client.chat.completions.create(
-        model=openai_lang_model,
-        messages=messages
-    )
-    reply = {
-        "answer": response.choices[0].message.content.strip(),
-        "citations": matched_docs
-    }
-    return reply
+    
+    try:
+        embedding = await generate_embedding(user_prompt)
+        loop = asyncio.get_running_loop()
+        matched_docs = await loop.run_in_executor(None, fetch_vector_search_results, embedding)
+        context_chunks = [doc["content"] for doc in matched_docs]
+        context = "\n\n".join(context_chunks)
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant from Enterprise Data Product Team. Answer a summary only based on the provided context from the Data Products (DP) Documents."},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {user_prompt}"}
+        ]
+        print("Context messages:", messages)
+        response = await client.chat.completions.create(
+            model=openai_lang_model,
+            messages=messages
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log the interaction to the database
+        log_chat_interaction(
+            user_id=user_id,
+            user_message=user_prompt,
+            ai_response=ai_response,
+            endpoint_used="/chat/context",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id,
+            metadata={"matched_docs": len(matched_docs)}
+        )
+        
+        reply = {
+            "answer": ai_response,
+            "citations": matched_docs
+        }
+        return reply
+    except Exception as e:
+        print(f"Error in chat_context: {str(e)}")
+        # Still log failed interactions
+        log_chat_interaction(
+            user_id=user_id,
+            user_message=user_prompt,
+            ai_response=f"Error: {str(e)}",
+            endpoint_used="/chat/context",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Updated chat endpoint: expects JSON payload matching ChatRequest model
 @app.post("/api/chat")
-async def chat_api(request: ChatRequest):
-    print(f"Processing chat_api with message: {request.message}")
+async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id)):
+    user_prompt = request.message
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
+    
+    start_time = time.time()
+    print(f"Processing chat_api with message: {user_prompt}")
     
     try:
         response = await client.chat.completions.create(
             model="gpt-4o-2024-05-13-tpm",
             temperature=0.3,
-            messages=[{"role": "user", "content": request.message}],
+            messages=[{"role": "user", "content": user_prompt}],
             stream=False
         )
         
         # Extract the response content
-        content = response.choices[0].message.content
+        ai_response = response.choices[0].message.content
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        return {"response": content}
+        # Log the interaction to the database
+        log_chat_interaction(
+            user_id=user_id,
+            user_message=user_prompt,
+            ai_response=ai_response,
+            endpoint_used="/api/chat",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id
+        )
+        
+        return {"response": ai_response}
     except Exception as e:
         print(f"Error in chat_api: {str(e)}")
+        # Still log failed interactions
+        log_chat_interaction(
+            user_id=user_id,
+            user_message=user_prompt,
+            ai_response=f"Error: {str(e)}",
+            endpoint_used="/api/chat",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # ----------------------------
 # CODE CONVERTER ENDPOINT
 # ----------------------------
 @app.post("/converter/")
-async def converter(request: ChatRequest):
+async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     print("Converter request message:", request.message)
     system_prompt = "You are an expert in converting legacy COBOL code to modern Python Code."
     user_prompt = f"Convert the following COBOL code to Python code:\n{request.message}"
@@ -218,7 +317,7 @@ class CodeExplainRequest(BaseModel):
     max_tokens: int = 300
 
 @app.post("/code-explainer/")
-async def code_explainer(request: CodeExplainRequest):
+async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(get_user_id)):
     print("Received code explain request for action:", request.action)
     if request.action == "simplify":
         system_prompt = "You are a senior software engineer who simplifies complex code without changing functionality."

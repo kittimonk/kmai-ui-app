@@ -14,6 +14,7 @@ openai==1.10.0
 numpy==1.26.0
 httpx==0.24.1
 redis==5.0.1
-pyodbc==5.0.1
+# pyodbc==5.0.1 - Removing this problematic dependency
+pymssql==2.2.8
 striprtf==0.0.18
 azure-search-documents==11.4.0
