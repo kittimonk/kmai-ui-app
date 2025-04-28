@@ -17,6 +17,7 @@ import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import { AuthProvider } from "./components/AuthProvider";
 import PrivateRoute from "./components/PrivateRoute";
+import Index from "./pages/Index";
 
 // Add custom CSS for styling
 import "./styles/custom.css";
