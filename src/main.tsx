@@ -4,19 +4,9 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-console.log("Initializing application with detailed logging...");
+console.log("Initializing application...");
 
-// Helper function to check if we're running in a Lovable preview environment
-const isLovablePreview = () => {
-  return window.location.hostname.includes('lovableproject.com') || 
-         window.location.hostname.includes('lovable.app');
-};
-
-console.log("Running in Lovable preview:", isLovablePreview());
-console.log("Current URL:", window.location.href);
-console.log("Current hostname:", window.location.hostname);
-
-// Define proper TypeScript interfaces for the error boundary
+// Simple ErrorBoundary component for catching React errors
 interface ErrorBoundaryProps {
   children: React.ReactNode;
 }
@@ -27,7 +17,6 @@ interface ErrorBoundaryState {
   errorInfo: React.ErrorInfo | null;
 }
 
-// Create a simple error boundary component for debugging
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -62,88 +51,58 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Initialize the app with enhanced error handling
+// Store a reference to any created root to prevent multiple initializations
+let rootInstance: any = null;
+
 function initApp() {
+  console.log("Initializing app...");
+  
   try {
-    console.log("Finding root element...");
-    const root = document.getElementById('root');
+    const rootElement = document.getElementById('root');
     
-    if (root) {
-      console.log("Root element found, rendering App");
-      console.log("Root element properties:", {
-        id: root.id,
-        tagName: root.tagName,
-        childNodes: root.childNodes.length,
-      });
-      
-      // IMPORTANT: In Lovable preview, we need to render our app regardless of existing content
-      // Only check if there's already a React instance to avoid conflicts
-      const hasReactInstance = root.hasAttribute('data-reactroot');
-      
-      if (hasReactInstance) {
-        console.log("Root already has React instance - skipping duplicate render");
-        return;
-      }
-      
-      // Create and render the app
-      try {
-        console.log("Creating React root...");
-        const reactRoot = createRoot(root);
-        console.log("React root created successfully");
-        
-        // Render with error boundary
-        try {
-          console.log("Rendering app...");
-          reactRoot.render(
-            <ErrorBoundary>
-              <React.StrictMode>
-                <App />
-              </React.StrictMode>
-            </ErrorBoundary>
-          );
-          console.log("App rendered successfully");
-          
-          // Verify render
-          setTimeout(() => {
-            console.log("Post-render check: Root has React content:", root.hasAttribute('data-reactroot'));
-            console.log("App mounted successfully");
-          }, 100);
-          
-        } catch (renderError) {
-          console.error("Error rendering the App:", renderError);
-        }
-      } catch (rootError) {
-        console.error("Error creating React root:", rootError);
-      }
-    } else {
+    if (!rootElement) {
       console.error("Root element not found!");
+      return;
     }
+    
+    console.log("Root element found with ID:", rootElement.id);
+    
+    // If we've already created a React root, don't create another one
+    if (rootInstance) {
+      console.log("React root already created, skipping initialization");
+      return;
+    }
+    
+    // Create a new React root
+    console.log("Creating new React root...");
+    rootInstance = createRoot(rootElement);
+    
+    // Render the application
+    console.log("Rendering application...");
+    rootInstance.render(
+      <ErrorBoundary>
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      </ErrorBoundary>
+    );
+    
+    console.log("Application rendered successfully");
   } catch (error) {
-    console.error("Critical error initializing the application:", error);
+    console.error("Error during app initialization:", error);
   }
 }
 
-// Check if DOM is ready and initialize app
-if (document.readyState === 'loading') {
-  console.log("Document is still loading, waiting for DOMContentLoaded");
-  document.addEventListener('DOMContentLoaded', initApp);
+// Initialize the application
+if (document.readyState === "loading") {
+  console.log("Document still loading, waiting for DOMContentLoaded");
+  document.addEventListener("DOMContentLoaded", initApp);
 } else {
-  console.log("Document is ready, initializing app immediately");
+  console.log("Document already loaded, initializing immediately");
   initApp();
 }
 
-// Add a global error handler
+// Global error handler
 window.addEventListener('error', (event) => {
-  console.error("Unhandled global error:", event.error);
-});
-
-// Log when window is fully loaded
-window.addEventListener('load', () => {
-  console.log("Window fully loaded");
-  
-  // Verify app is mounted after window load
-  const rootElement = document.getElementById('root');
-  if (rootElement) {
-    console.log("Window loaded: Root element children count:", rootElement.childNodes.length);
-  }
+  console.error("Global error caught:", event.error);
 });
