@@ -62,18 +62,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Track if we've already created a root to prevent duplicate roots
-let reactRoot;
-
-// Check if the DOM is ready
-if (document.readyState === 'loading') {
-  console.log("Document is still loading, waiting for DOMContentLoaded");
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  console.log("Document is ready, initializing app immediately");
-  initApp();
-}
-
+// Initialize the app with enhanced error handling
 function initApp() {
   try {
     console.log("Finding root element...");
@@ -87,23 +76,24 @@ function initApp() {
         childNodes: root.childNodes.length,
       });
       
-      // Only check for React's data-reactroot attribute to avoid double React instances
-      // Removed check for root.childNodes.length > 0 to allow rendering in Lovable preview
-      if (root.hasAttribute('data-reactroot')) {
+      // IMPORTANT: In Lovable preview, we need to render our app regardless of existing content
+      // Only check if there's already a React instance to avoid conflicts
+      const hasReactInstance = root.hasAttribute('data-reactroot');
+      
+      if (hasReactInstance) {
         console.log("Root already has React instance - skipping duplicate render");
         return;
       }
       
-      // Create React root with additional error logging
+      // Create and render the app
       try {
-        // Only create a new root if we haven't already
-        if (!reactRoot) {
-          reactRoot = createRoot(root);
-          console.log("React root created successfully");
-        }
+        console.log("Creating React root...");
+        const reactRoot = createRoot(root);
+        console.log("React root created successfully");
         
-        // Attempt to render with detailed reporting
+        // Render with error boundary
         try {
+          console.log("Rendering app...");
           reactRoot.render(
             <ErrorBoundary>
               <React.StrictMode>
@@ -113,43 +103,45 @@ function initApp() {
           );
           console.log("App rendered successfully");
           
-          // Add a post-render check
+          // Verify render
           setTimeout(() => {
-            console.log("Post-render check: Root children count:", root.childNodes.length);
+            console.log("Post-render check: Root has React content:", root.hasAttribute('data-reactroot'));
             console.log("App mounted successfully");
           }, 100);
           
         } catch (renderError) {
           console.error("Error rendering the App:", renderError);
-          // Try rendering a minimal app to see if the issue is with the App component
-          try {
-            reactRoot.render(<div>Minimal App Test</div>);
-            console.log("Minimal app rendered successfully - issue is likely with App component");
-          } catch (minimalError) {
-            console.error("Even minimal app failed to render:", minimalError);
-          }
         }
       } catch (rootError) {
         console.error("Error creating React root:", rootError);
       }
     } else {
-      console.error("Root element not found. DOM structure:", document.body.innerHTML);
+      console.error("Root element not found!");
     }
   } catch (error) {
     console.error("Critical error initializing the application:", error);
   }
 }
 
-// Add a global error handler to catch unhandled errors
+// Check if DOM is ready and initialize app
+if (document.readyState === 'loading') {
+  console.log("Document is still loading, waiting for DOMContentLoaded");
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  console.log("Document is ready, initializing app immediately");
+  initApp();
+}
+
+// Add a global error handler
 window.addEventListener('error', (event) => {
   console.error("Unhandled global error:", event.error);
 });
 
-// Log when the window has fully loaded
+// Log when window is fully loaded
 window.addEventListener('load', () => {
   console.log("Window fully loaded");
   
-  // Check if App was successfully mounted after window load
+  // Verify app is mounted after window load
   const rootElement = document.getElementById('root');
   if (rootElement) {
     console.log("Window loaded: Root element children count:", rootElement.childNodes.length);
