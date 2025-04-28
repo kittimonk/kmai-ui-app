@@ -17,7 +17,6 @@ import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import { AuthProvider } from "./components/AuthProvider";
 import PrivateRoute from "./components/PrivateRoute";
-import Index from "./pages/Index";
 
 // Add custom CSS for styling
 import "./styles/custom.css";
@@ -38,14 +37,14 @@ function App() {
               <Route path="/auth/callback" element={<AuthCallback />} />
               
               {/* Protected Routes */}
-              <Route path="/home" element={<Layout><Home /></Layout>} />
+              <Route path="/home" element={<PrivateRoute><Layout><Home /></Layout></PrivateRoute>} />
               <Route path="/" element={<Navigate to="/home" replace />} />
-              <Route path="/chat" element={<Layout><Chat /></Layout>} />
-              <Route path="/code-converter" element={<Layout><CodeConverter /></Layout>} />
-              <Route path="/code-explainer" element={<Layout><CodeExplainer /></Layout>} />
-              <Route path="/ai-remediation-assistant" element={<Layout><AIRemediationAssistant /></Layout>} />
-              <Route path="/document-ingestion" element={<Layout><DocumentIngestion /></Layout>} />
-              <Route path="/knowledge-base" element={<Layout><KnowledgeBase /></Layout>} />
+              <Route path="/chat" element={<PrivateRoute><Layout><Chat /></Layout></PrivateRoute>} />
+              <Route path="/code-converter" element={<PrivateRoute><Layout><CodeConverter /></Layout></PrivateRoute>} />
+              <Route path="/code-explainer" element={<PrivateRoute><Layout><CodeExplainer /></Layout></PrivateRoute>} />
+              <Route path="/ai-remediation-assistant" element={<PrivateRoute><Layout><AIRemediationAssistant /></Layout></PrivateRoute>} />
+              <Route path="/document-ingestion" element={<PrivateRoute><Layout><DocumentIngestion /></Layout></PrivateRoute>} />
+              <Route path="/knowledge-base" element={<PrivateRoute><Layout><KnowledgeBase /></Layout></PrivateRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
