@@ -13,15 +13,23 @@ try {
   componentTagger = () => null; // Provide a no-op function
 }
 
+// Verify that react plugin is available
+if (typeof react !== 'function') {
+  console.error('ERROR: @vitejs/plugin-react-swc is not properly loaded!');
+  console.error('This might cause build failures. Please check your installation.');
+  // Don't throw here, try to continue with a fallback
+}
+
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
   },
   plugins: [
-    react(),
+    // Only add react plugin if it's available
+    typeof react === 'function' ? react() : null,
     mode === 'development' && componentTagger && componentTagger(),
-  ].filter(Boolean),
+  ].filter(Boolean), // Filter out null values
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

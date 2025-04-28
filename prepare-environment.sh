@@ -3,6 +3,8 @@
 set -e
 
 echo "=== Preparing environment for build ==="
+echo "Node version: $(node -v)"
+echo "NPM version: $(npm -v)"
 
 # Check for Node.js and npm
 if ! command -v node &> /dev/null; then
@@ -27,21 +29,76 @@ rm -rf node_modules package-lock.json npm-debug.log
 echo "Cleaning npm cache..."
 npm cache clean --force
 
-# Install dependencies with forced resolution
-echo "Installing dependencies with forced resolution..."
+# Install dependencies
+echo "Installing dependencies..."
 npm install --legacy-peer-deps
 
-# Explicitly install vite plugin with force flag
-echo "Explicitly installing Vite plugin..."
-npm install --force --save-dev @vitejs/plugin-react-swc
+# Check if vite plugin was installed correctly
+echo "Checking for Vite plugin installation..."
+if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+    echo "Vite plugin not found after initial installation. Attempting direct installation..."
+    # Try multiple installation methods
+    echo "Method 1: Using --save-dev"
+    npm install --save-dev @vitejs/plugin-react-swc || true
+    
+    echo "Method 2: Using --no-save"
+    npm install --no-save @vitejs/plugin-react-swc || true
+    
+    echo "Method 3: Using --force"
+    npm install --force --save-dev @vitejs/plugin-react-swc || true
+    
+    # Final check
+    if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+        echo "All automatic installation methods failed. Trying direct download..."
+        
+        # Create directory structure if it doesn't exist
+        mkdir -p node_modules/@vitejs/
+        
+        # Use npm pack to get the package tarball
+        echo "Using npm pack to get the package..."
+        TMPDIR=$(mktemp -d)
+        cd $TMPDIR
+        npm pack @vitejs/plugin-react-swc
+        PACKAGE=$(ls *.tgz)
+        tar -xzf $PACKAGE
+        cd -
+        
+        # Move the extracted package to node_modules
+        if [ -d "$TMPDIR/package" ]; then
+            echo "Moving extracted package to node_modules..."
+            mv "$TMPDIR/package" node_modules/@vitejs/plugin-react-swc
+        else
+            echo "Failed to extract package."
+            exit 1
+        fi
+        
+        # Cleanup
+        rm -rf $TMPDIR
+    fi
+fi
 
 # Verify installation
 echo "Verifying Vite plugin installation..."
 if [ -d "node_modules/@vitejs/plugin-react-swc" ]; then
     echo "✓ @vitejs/plugin-react-swc is installed"
     ls -la node_modules/@vitejs/plugin-react-swc/
+    
+    # Check package.json to make sure the dependency is listed
+    if ! grep -q "@vitejs/plugin-react-swc" package.json; then
+        echo "Adding @vitejs/plugin-react-swc to package.json..."
+        # Use a temporary file to avoid issues with direct in-place editing
+        npm install --save-dev @vitejs/plugin-react-swc
+    fi
 else
     echo "✗ @vitejs/plugin-react-swc installation failed"
+    echo "Detailed diagnostics:"
+    echo "Contents of node_modules/@vitejs directory (if it exists):"
+    ls -la node_modules/@vitejs/ 2>/dev/null || echo "Directory does not exist"
+    
+    echo "NPM debug logs:"
+    cat npm-debug.log 2>/dev/null || echo "No debug logs found"
+    
+    echo "Please try installing manually with: npm install --save-dev @vitejs/plugin-react-swc"
     exit 1
 fi
 
