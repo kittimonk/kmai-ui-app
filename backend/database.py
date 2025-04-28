@@ -1,4 +1,3 @@
-
 import os
 import pymssql
 import time
@@ -9,22 +8,26 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Azure SQL Database connection parameters
-# These should be set as environment variables in production
+# Azure SQL Database connection parameters with MSI authentication
 SQL_SERVER = os.environ.get("SQL_SERVER", "your-server.database.windows.net")
 SQL_DATABASE = os.environ.get("SQL_DATABASE", "your-database")
 SQL_USERNAME = os.environ.get("SQL_USERNAME", "your-username")
-SQL_PASSWORD = os.environ.get("SQL_PASSWORD", "your-password")
+# Note: No password needed for MSI authentication
 
 def get_db_connection():
-    """Create a connection to Azure SQL Database using pymssql."""
+    """Create a connection to Azure SQL Database using MSI authentication."""
     try:
-        # Connect to the Azure SQL database
+        # Connect to Azure SQL database using MSI authentication
         conn = pymssql.connect(
             server=SQL_SERVER,
+            database=SQL_DATABASE,
             user=SQL_USERNAME,
-            password=SQL_PASSWORD,
-            database=SQL_DATABASE
+            # Password is None for MSI authentication
+            password=None,
+            # Additional connection parameters
+            appname='KMAIApp',
+            encrypt=True,
+            authentication='ActiveDirectoryMsi'
         )
         return conn
     except Exception as e:
