@@ -10,9 +10,20 @@ parent_dir = Path(__file__).parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-# Import from kmai_ent03_ui_app package
-from backend.app import app
-from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
+# Try different import paths to find the app
+try:
+    # Try direct import first
+    from backend.app import app
+    from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
+except ImportError:
+    try:
+        # If we're in the package directory structure
+        from kmai_ent03_ui_app.app import app
+    except ImportError:
+        print("ERROR: Could not import app module. Make sure the 'backend' directory is in your PYTHONPATH.")
+        print(f"Current PYTHONPATH: {sys.path}")
+        print(f"Directories available: {os.listdir(parent_dir)}")
+        raise ImportError("Could not import app from any expected location")
 
 class TestApp(unittest.TestCase):
     def setUp(self):

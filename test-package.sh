@@ -104,7 +104,17 @@ pip install -e .
 
 # Add the current directory to PYTHONPATH to help with imports
 echo "Setting PYTHONPATH..."
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/..
+
+# Make sure the backend directory is also in PYTHONPATH
+if [ -d "../backend" ]; then
+  echo "Adding backend directory to PYTHONPATH..."
+  export PYTHONPATH=$PYTHONPATH:$(pwd)/../backend:$(pwd)/..
+fi
+
+echo "Current PYTHONPATH: $PYTHONPATH"
+echo "Current directory structure:"
+find . -type d -maxdepth 3
 
 # Use either pytest or unittest, depending on what's installed
 echo "Running tests..."
