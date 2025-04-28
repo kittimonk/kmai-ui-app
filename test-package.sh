@@ -12,10 +12,20 @@ pip install --upgrade setuptools wheel
 echo "Installing test requirements..."
 pip install -r test-requirements.txt
 
-# Ensure node dependencies are installed
+# Ensure node dependencies are installed, with extra checks for Vite plugins
 echo "Installing Node.js dependencies..."
 if [ -f "package.json" ]; then
+  # First try normal installation
   npm ci
+  
+  # Explicitly check and install Vite plugin if missing
+  echo "Checking for Vite plugin dependencies..."
+  if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+    echo "Vite plugin missing, explicitly installing @vitejs/plugin-react-swc..."
+    npm install --save-dev @vitejs/plugin-react-swc
+  else
+    echo "Vite plugin found in node_modules."
+  fi
 else
   echo "WARNING: No package.json found, skipping Node.js dependency installation"
 fi
