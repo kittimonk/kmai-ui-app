@@ -62,6 +62,9 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
+// Track if we've already created a root to prevent duplicate roots
+let reactRoot;
+
 // Check if the DOM is ready
 if (document.readyState === 'loading') {
   console.log("Document is still loading, waiting for DOMContentLoaded");
@@ -84,10 +87,19 @@ function initApp() {
         childNodes: root.childNodes.length,
       });
       
+      // Check if root is already rendered
+      if (root.hasAttribute('data-reactroot') || root.childNodes.length > 0) {
+        console.log("Root already has content - skipping duplicate render");
+        return;
+      }
+      
       // Create React root with additional error logging
       try {
-        const reactRoot = createRoot(root);
-        console.log("React root created successfully");
+        // Only create a new root if we haven't already
+        if (!reactRoot) {
+          reactRoot = createRoot(root);
+          console.log("React root created successfully");
+        }
         
         // Attempt to render with detailed reporting
         try {
