@@ -16,24 +16,35 @@ console.log("Running in Lovable preview:", isLovablePreview());
 console.log("Current URL:", window.location.href);
 console.log("Current hostname:", window.location.hostname);
 
+// Define proper TypeScript interfaces for the error boundary
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: React.ErrorInfo | null;
+}
+
 // Create a simple error boundary component for debugging
-class ErrorBoundary extends React.Component {
-  constructor(props) {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error, errorInfo: null };
   }
 
-  componentDidCatch(error, errorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     console.error("React Error Boundary caught an error:", error);
     console.error("Component stack:", errorInfo.componentStack);
     this.setState({ errorInfo });
   }
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <div style={{ margin: '20px', padding: '20px', border: '1px solid red', color: 'red' }}>
