@@ -87,9 +87,10 @@ function initApp() {
         childNodes: root.childNodes.length,
       });
       
-      // Check if root is already rendered
-      if (root.hasAttribute('data-reactroot') || root.childNodes.length > 0) {
-        console.log("Root already has content - skipping duplicate render");
+      // Only check for React's data-reactroot attribute to avoid double React instances
+      // Removed check for root.childNodes.length > 0 to allow rendering in Lovable preview
+      if (root.hasAttribute('data-reactroot')) {
+        console.log("Root already has React instance - skipping duplicate render");
         return;
       }
       
