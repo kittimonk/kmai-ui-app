@@ -98,23 +98,48 @@ if [ -z "$(ls -A kmai_ent03_ui_app/static)" ]; then
    echo "WARNING: kmai_ent03_ui_app/static directory is empty. This may cause issues."
 fi
 
+# Debug: Check if database.py was copied properly
+echo "Checking for database.py..."
+if [ -f "kmai_ent03_ui_app/database.py" ]; then
+  echo "SUCCESS: database.py found in the package"
+else
+  echo "ERROR: database.py not found in kmai_ent03_ui_app/"
+  # Check if it exists in the parent directory
+  if [ -f "../backend/database.py" ]; then
+    echo "Found database.py in ../backend/ - copying it now"
+    cp "../backend/database.py" "kmai_ent03_ui_app/"
+  else
+    echo "Could not find database.py in any expected location"
+  fi
+fi
+
 # Install the package in development mode to make imports work
 echo "Installing the package in development mode..."
 pip install -e .
 
 # Add the current directory to PYTHONPATH to help with imports
 echo "Setting PYTHONPATH..."
+# Include all possible directories that might contain the modules
 export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/..
 
-# Make sure the backend directory is also in PYTHONPATH
+# Check for backend directory and add to PYTHONPATH
 if [ -d "../backend" ]; then
   echo "Adding backend directory to PYTHONPATH..."
-  export PYTHONPATH=$PYTHONPATH:$(pwd)/../backend:$(pwd)/..
+  export PYTHONPATH=$PYTHONPATH:$(pwd)/../backend
+fi
+
+# Also add the parent of the backend directory
+if [ -d "../backend" ]; then
+  echo "Adding parent directory to PYTHONPATH..."
+  export PYTHONPATH=$PYTHONPATH:$(pwd)/..
 fi
 
 echo "Current PYTHONPATH: $PYTHONPATH"
-echo "Current directory structure:"
-find . -type d -maxdepth 3
+echo "Current directory structure (package directory):"
+find . -type f -name "*.py" | sort
+
+echo "Current directory structure (parent directory):"
+find .. -maxdepth 3 -type f -name "*.py" | sort
 
 # Use either pytest or unittest, depending on what's installed
 echo "Running tests..."

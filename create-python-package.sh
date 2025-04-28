@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -109,6 +108,18 @@ if [ -f "backend/app.py" ]; then
   cp backend/app.py "$PKG_DIR/$PKG_NAME/app.py"
   echo "app.py copied successfully"
   
+  # Copy database.py file from backend directory if it exists
+  if [ -f "backend/database.py" ]; then
+    echo "Copying database.py from backend directory..."
+    cp backend/database.py "$PKG_DIR/$PKG_NAME/database.py"
+    echo "database.py copied successfully"
+    
+    # Update imports in database.py if needed
+    sed -i 's/^from backend\./from kmai_ent03_ui_app./g' "$PKG_DIR/$PKG_NAME/database.py"
+  else
+    echo "WARNING: database.py not found in backend directory"
+  fi
+  
   # Check if app.py contains static file mounting code and add if missing
   if ! grep -q "app.mount(\"/\", StaticFiles" "$PKG_DIR/$PKG_NAME/app.py"; then
     echo "Adding static file mounting code to app.py..."
@@ -196,8 +207,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
 EOL
-  echo "Created default app.py"
-fi
+echo "Created default app.py"
 
 # Create a better test file that properly imports the app
 echo "Creating test files..."
@@ -207,7 +217,6 @@ import sys
 import unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
-from kmai_ent03_ui_app import app
 
 # Add the parent directory to the Python path to make imports work
 parent_dir = Path(__file__).parent.parent
@@ -216,12 +225,34 @@ if str(parent_dir) not in sys.path:
 
 # Try different import paths to find the app
 try:
+    # Try importing from the package first
     from ${PKG_NAME}.app import app
+    # Also try to import database functions
+    try:
+        from ${PKG_NAME}.database import initialize_chat_history_table, initialize_feature_interaction_table
+        print("Successfully imported database functions from package")
+    except ImportError as e:
+        print(f"Warning: Could not import database functions from package: {e}")
 except ImportError:
     try:
-        # Try the direct import if we're in the package directory itself
-        from ${PKG_NAME}.app import app  
-    except ImportError:
+        # If we're not in the package structure, try direct import
+        from backend.app import app
+        # Try to import database functions
+        try:
+            from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
+            print("Successfully imported database functions from backend")
+        except ImportError as e:
+            print(f"Warning: Could not import database functions from backend: {e}")
+    except ImportError as e:
+        # Print detailed diagnostic information
+        print(f"ERROR: Could not import app module: {e}")
+        print(f"Current PYTHONPATH: {sys.path}")
+        print(f"Current directory: {os.getcwd()}")
+        print("Directories in current location:")
+        for root, dirs, files in os.walk(".", topdown=True, maxdepth=2):
+            print(f"  {root}: {dirs}")
+            if 'app.py' in files or 'database.py' in files:
+                print(f"    Found relevant files: {[f for f in files if f in ['app.py', 'database.py']]}")
         raise ImportError("Could not import app from any expected location")
 
 class TestApp(unittest.TestCase):
@@ -264,18 +295,6 @@ class TestApp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-#import pytest
-#from fastapi.testclient import TestClient
-#from kmai_ent03_ui_app.app import app  # Import the FastAPI app from your main module
-
-#client = TestClient(app)
-
-#def test_placeholder():
-    # Test a non-existent route (e.g., '/nonexistent')
-#    response = client.get("/nonexistent") # A FET request to a non-existent endpoint
-#    assert response.status_code == 404 # Ensure the status code is 404 (Not Found)
-    
 EOL
 echo "Created test_app.py"
 
