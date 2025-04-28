@@ -2,9 +2,27 @@
 #!/bin/bash
 set -e  # Exit immediately if a command exits with a non-zero status
 
+# Check for Vite plugin before build
+echo "Checking for Vite plugin before build..."
+if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+  echo "Vite plugin not found. Installing it..."
+  npm install --save-dev @vitejs/plugin-react-swc
+  
+  # Verify installation
+  if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+    echo "ERROR: Failed to install Vite plugin. Trying alternative methods..."
+    npm install --no-save @vitejs/plugin-react-swc || npm install --force --save-dev @vitejs/plugin-react-swc
+    
+    if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+      echo "ERROR: All attempts to install Vite plugin failed!"
+      exit 1
+    fi
+  fi
+fi
+
 # Build the Vite app to static directory
 echo "Building Vite app to static directory..."
-npm ci
+echo "Using Vite plugin from: $(ls -la node_modules/@vitejs/plugin-react-swc)"
 npx vite build
 
 # Ensure static directory exists and has content

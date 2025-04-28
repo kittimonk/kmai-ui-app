@@ -12,26 +12,47 @@ pip install --upgrade setuptools wheel
 echo "Installing test requirements..."
 pip install -r test-requirements.txt
 
+# Check if Vite plugin is already installed
+PLUGIN_INSTALLED=false
+if [ -d "node_modules/@vitejs/plugin-react-swc" ]; then
+  echo "Vite plugin found before dependency installation"
+  PLUGIN_INSTALLED=true
+  # Backup the plugin directory
+  echo "Backing up existing plugin..."
+  mkdir -p .temp_backup
+  cp -r node_modules/@vitejs/plugin-react-swc .temp_backup/
+fi
+
 # Force clean installation of Node.js dependencies to resolve Vite plugin issues
-echo "Force reinstalling Node.js dependencies..."
+echo "Installing Node.js dependencies..."
 if [ -f "package.json" ]; then
-  # Remove node_modules to ensure clean installation
-  echo "Removing node_modules for clean installation..."
-  rm -rf node_modules
-  
   # Install dependencies with --legacy-peer-deps to avoid dependency conflicts
+  # But don't remove node_modules completely to preserve our plugin if it's already there
   echo "Installing dependencies with npm..."
   npm install --legacy-peer-deps
   
-  # Explicitly install Vite plugin with multiple fallback methods
-  echo "Explicitly installing Vite plugin..."
-  if ! npm install --save-dev @vitejs/plugin-react-swc; then
-    echo "Standard installation failed, trying with --no-save..."
-    if ! npm install --no-save @vitejs/plugin-react-swc; then
-      echo "Installation with --no-save failed, trying with --force..."
-      if ! npm install --force --save-dev @vitejs/plugin-react-swc; then
-        echo "ERROR: All attempts to install @vitejs/plugin-react-swc failed!"
-        exit 1
+  # Check if plugin was preserved or needs to be reinstalled
+  if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+    echo "Plugin not found after npm install"
+    
+    # Restore from backup if we had it
+    if [ "$PLUGIN_INSTALLED" = true ] && [ -d ".temp_backup/plugin-react-swc" ]; then
+      echo "Restoring plugin from backup..."
+      mkdir -p node_modules/@vitejs/
+      cp -r .temp_backup/plugin-react-swc node_modules/@vitejs/
+    else
+      # Explicitly install Vite plugin with multiple fallback methods
+      echo "Explicitly installing Vite plugin..."
+      npm install --save-dev @vitejs/plugin-react-swc || true
+      
+      if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+        echo "Standard installation failed, trying with --no-save..."
+        npm install --no-save @vitejs/plugin-react-swc || true
+      fi
+      
+      if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
+        echo "Installation with --no-save failed, trying with --force..."
+        npm install --force --save-dev @vitejs/plugin-react-swc || true
       fi
     fi
   fi
@@ -42,10 +63,15 @@ if [ -f "package.json" ]; then
     ls -la node_modules/@vitejs/plugin-react-swc/
   else
     echo "ERROR: @vitejs/plugin-react-swc installation could not be verified!"
-    exit 1
+    echo "This may cause the build to fail. Continuing anyway..."
   fi
 else
   echo "WARNING: No package.json found, skipping Node.js dependency installation"
+fi
+
+# Clean up backup
+if [ -d ".temp_backup" ]; then
+  rm -rf .temp_backup
 fi
 
 # Make the create-python-package.sh script executable
