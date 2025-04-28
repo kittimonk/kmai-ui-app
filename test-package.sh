@@ -12,6 +12,14 @@ pip install --upgrade setuptools wheel
 echo "Installing test requirements..."
 pip install -r test-requirements.txt
 
+# Ensure node dependencies are installed
+echo "Installing Node.js dependencies..."
+if [ -f "package.json" ]; then
+  npm ci
+else
+  echo "WARNING: No package.json found, skipping Node.js dependency installation"
+fi
+
 # Make the create-python-package.sh script executable
 echo "Making create-python-package.sh executable..."
 chmod +x create-python-package.sh
