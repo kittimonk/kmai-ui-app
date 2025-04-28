@@ -2,7 +2,16 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
+
+// Try to import componentTagger, but don't fail if it's missing
+let componentTagger;
+try {
+  const lovableTagger = require("lovable-tagger");
+  componentTagger = lovableTagger.componentTagger;
+} catch (e) {
+  console.warn("Warning: lovable-tagger not found, continuing without it");
+  componentTagger = () => null; // Provide a no-op function
+}
 
 export default defineConfig(({ mode }) => ({
   server: {
@@ -11,8 +20,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
+    mode === 'development' && componentTagger && componentTagger(),
   ].filter(Boolean),
   resolve: {
     alias: {

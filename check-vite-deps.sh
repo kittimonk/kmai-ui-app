@@ -15,17 +15,47 @@ fi
 if [ ! -d "node_modules/@vitejs/plugin-react-swc" ]; then
   echo "ERROR: @vitejs/plugin-react-swc is missing!"
   echo "Installing it now..."
-  npm install --save-dev @vitejs/plugin-react-swc
+  
+  # Try installation with different methods
+  echo "Attempt 1: Using npm install --save-dev"
+  if npm install --save-dev @vitejs/plugin-react-swc; then
+    echo "SUCCESS: @vitejs/plugin-react-swc has been installed."
+  else
+    echo "First attempt failed, trying alternative installation method..."
+    echo "Attempt 2: Using npm install --no-save"
+    if npm install --no-save @vitejs/plugin-react-swc; then
+      echo "SUCCESS: @vitejs/plugin-react-swc has been installed with --no-save option."
+    else
+      echo "FAILED: @vitejs/plugin-react-swc installation failed after multiple attempts!"
+      echo "Try installing it manually with: npm install --save-dev @vitejs/plugin-react-swc"
+      
+      # Check for common issues
+      echo "Checking for common issues..."
+      if [ ! -f "package.json" ]; then
+        echo "ERROR: package.json is missing!"
+      fi
+      
+      # Check npm registry accessibility
+      echo "Checking npm registry accessibility..."
+      if ! npm ping; then
+        echo "ERROR: Cannot access npm registry. Check your internet connection."
+      fi
+      
+      exit 1
+    fi
+  fi
   
   # Verify installation
   if [ -d "node_modules/@vitejs/plugin-react-swc" ]; then
-    echo "SUCCESS: @vitejs/plugin-react-swc has been installed."
+    echo "VERIFICATION: @vitejs/plugin-react-swc directory exists."
+    ls -la node_modules/@vitejs/plugin-react-swc/
   else
-    echo "FAILED: @vitejs/plugin-react-swc installation failed!"
+    echo "VERIFICATION FAILED: @vitejs/plugin-react-swc directory still missing!"
     exit 1
   fi
 else
   echo "SUCCESS: @vitejs/plugin-react-swc is properly installed."
+  ls -la node_modules/@vitejs/plugin-react-swc/
 fi
 
 # Check for lovable-tagger

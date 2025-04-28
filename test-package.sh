@@ -19,13 +19,31 @@ if [ -f "package.json" ]; then
   echo "Removing node_modules for clean installation..."
   rm -rf node_modules
   
-  # Install dependencies
+  # Install dependencies with --legacy-peer-deps to avoid dependency conflicts
   echo "Installing dependencies with npm..."
-  npm install
+  npm install --legacy-peer-deps
   
-  # Explicitly install Vite plugin
+  # Explicitly install Vite plugin with multiple fallback methods
   echo "Explicitly installing Vite plugin..."
-  npm install --save-dev @vitejs/plugin-react-swc
+  if ! npm install --save-dev @vitejs/plugin-react-swc; then
+    echo "Standard installation failed, trying with --no-save..."
+    if ! npm install --no-save @vitejs/plugin-react-swc; then
+      echo "Installation with --no-save failed, trying with --force..."
+      if ! npm install --force --save-dev @vitejs/plugin-react-swc; then
+        echo "ERROR: All attempts to install @vitejs/plugin-react-swc failed!"
+        exit 1
+      fi
+    fi
+  fi
+  
+  # Verify the installation
+  if [ -d "node_modules/@vitejs/plugin-react-swc" ]; then
+    echo "SUCCESS: @vitejs/plugin-react-swc has been installed and verified."
+    ls -la node_modules/@vitejs/plugin-react-swc/
+  else
+    echo "ERROR: @vitejs/plugin-react-swc installation could not be verified!"
+    exit 1
+  fi
 else
   echo "WARNING: No package.json found, skipping Node.js dependency installation"
 fi
