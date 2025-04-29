@@ -7,60 +7,73 @@ from fastapi.testclient import TestClient
 
 # Add the parent directory to the Python path to make imports work
 parent_dir = Path(__file__).parent.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
+sys.path.insert(0, str(parent_dir))
 
 # Print debug info
 print(f"Current directory: {os.getcwd()}")
 print(f"Python path: {sys.path}")
 print(f"Looking for app and database modules...")
 
-# Try different import paths to find the app
+# Create a flag to track import success
+app_import_success = False
+database_import_success = False
+
+# Try different import approaches
 try:
-    # Try direct import first
+    # First try: Import from backend package
     from backend.app import app
-    print("Successfully imported app from backend.")
+    print("Successfully imported app from backend package")
+    app_import_success = True
     
     try:
         from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
-        print("Successfully imported database functions from backend")
+        print("Successfully imported database functions from backend package")
+        database_import_success = True
     except ImportError as e:
-        print(f"Warning: Could not import database from backend: {e}")
-        # Try to look for database.py in the same directory as app.py
-        import backend
-        backend_dir = Path(backend.__file__).parent
-        database_path = backend_dir / "database.py"
-        print(f"Looking for database.py at {database_path}")
-        if database_path.exists():
-            print(f"Found database.py at {database_path}, but couldn't import it")
-        
+        print(f"Warning: Could not import database from backend package: {e}")
 except ImportError as e:
-    print(f"Failed to import from backend: {e}")
+    print(f"Could not import from backend package: {e}")
+
+# If backend package import failed, try kmai_ent03_ui_app package
+if not app_import_success:
     try:
-        # Check if we're in the package directory structure
-        import kmai_ent03_ui_app
-        print(f"Found kmai_ent03_ui_app package at {kmai_ent03_ui_app.__file__}")
-        
-        # If we're in the package directory structure
         from kmai_ent03_ui_app.app import app
-        print("Successfully imported app from package.")
+        print("Successfully imported app from kmai_ent03_ui_app package")
+        app_import_success = True
         
         try:
             from kmai_ent03_ui_app.database import initialize_chat_history_table, initialize_feature_interaction_table
-            print("Successfully imported database functions from package")
+            print("Successfully imported database functions from kmai_ent03_ui_app package")
+            database_import_success = True
         except ImportError as e:
-            print(f"Warning: Could not import database from package: {e}")
-    except ImportError:
-        print("ERROR: Could not import app module. Make sure the 'backend' directory is in your PYTHONPATH.")
-        print(f"Current PYTHONPATH: {sys.path}")
-        print("Available files in current directory:")
-        for f in os.listdir('.'):
-            print(f"  {f}")
-        print("Available directories:")
-        for d in os.listdir(parent_dir):
-            if os.path.isdir(os.path.join(parent_dir, d)):
-                print(f"  {d}")
-        raise ImportError("Could not import app from any expected location")
+            print(f"Warning: Could not import database from kmai_ent03_ui_app package: {e}")
+    except ImportError as e:
+        print(f"Could not import from kmai_ent03_ui_app package: {e}")
+
+# If all imports failed, let's check if files exist in expected locations
+if not app_import_success:
+    # Check if backend/app.py exists
+    backend_app_path = parent_dir / "backend" / "app.py"
+    if backend_app_path.exists():
+        print(f"Found app.py at {backend_app_path}, but couldn't import it")
+    
+    # Check if kmai_ent03_ui_app/app.py exists
+    kmai_app_path = parent_dir / "kmai_ent03_ui_app" / "app.py"
+    if kmai_app_path.exists():
+        print(f"Found app.py at {kmai_app_path}, but couldn't import it")
+    
+    # Find all .py files in the project to help debugging
+    print("Available Python files in project:")
+    py_files = list(parent_dir.glob("**/*.py"))
+    for py_file in py_files[:10]:  # Limit to first 10 to avoid too much output
+        print(f"  {py_file.relative_to(parent_dir)}")
+    
+    if len(py_files) > 10:
+        print(f"  ... and {len(py_files) - 10} more files")
+
+# If we still couldn't import the app, raise an error
+if not app_import_success:
+    raise ImportError("Could not import app module from any location. Tests cannot continue.")
 
 class TestApp(unittest.TestCase):
     def setUp(self):
@@ -71,6 +84,7 @@ class TestApp(unittest.TestCase):
         self.static_dirs = [
             self.package_dir / "kmai_ent03_ui_app" / "static",
             self.package_dir / "static",
+            self.package_dir / "backend" / "static",
         ]
         
         # Find the first existing static directory
