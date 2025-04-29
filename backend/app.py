@@ -1,4 +1,3 @@
-
 import asyncio
 import os, subprocess, time
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
@@ -23,8 +22,8 @@ from striprtf.striprtf import rtf_to_text
 from pathlib import Path
 import time
 
-# Import our database module
-from backend.database import (
+# Import directly from the local module since we're already in the backend directory
+from database import (
     initialize_chat_history_table, 
     initialize_feature_interaction_table,
     log_chat_interaction, 

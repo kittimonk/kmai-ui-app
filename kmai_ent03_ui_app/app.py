@@ -22,6 +22,10 @@ import uuid
 from striprtf.striprtf import rtf_to_text
 from pathlib import Path
 import time
+import sys
+
+# Add the parent directory to sys.path to make backend importable
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our database module
 from backend.database import (
