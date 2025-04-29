@@ -51,13 +51,17 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Make sure we have only ONE root element for React
+// Get the root element once
 const rootElement = document.getElementById('root');
+
+// Only create a root and render if the element exists
 if (!rootElement) {
   console.error("Root element not found! Unable to mount the application.");
 } else {
-  console.log("Root element found, rendering application...");
+  // Create root only once
   const root = createRoot(rootElement);
+  
+  // Render the application
   root.render(
     <React.StrictMode>
       <ErrorBoundary>
@@ -65,6 +69,7 @@ if (!rootElement) {
       </ErrorBoundary>
     </React.StrictMode>
   );
+  
   console.log("Application rendered successfully");
 }
 
