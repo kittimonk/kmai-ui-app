@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
@@ -51,58 +50,38 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Store a reference to any created root to prevent multiple initializations
-let rootInstance: any = null;
-
-function initApp() {
-  console.log("Initializing app...");
-  
-  try {
-    const rootElement = document.getElementById('root');
-    
-    if (!rootElement) {
-      console.error("Root element not found!");
-      return;
-    }
-    
-    console.log("Root element found with ID:", rootElement.id);
-    
-    // If we've already created a React root, don't create another one
-    if (rootInstance) {
-      console.log("React root already created, skipping initialization");
-      return;
-    }
-    
-    // Create a new React root
-    console.log("Creating new React root...");
-    rootInstance = createRoot(rootElement);
-    
-    // Render the application
-    console.log("Rendering application...");
-    rootInstance.render(
-      <ErrorBoundary>
-        <React.StrictMode>
-          <App />
-        </React.StrictMode>
-      </ErrorBoundary>
-    );
-    
-    console.log("Application rendered successfully");
-  } catch (error) {
-    console.error("Error during app initialization:", error);
-  }
-}
-
 // Initialize the application
-if (document.readyState === "loading") {
-  console.log("Document still loading, waiting for DOMContentLoaded");
-  document.addEventListener("DOMContentLoaded", initApp);
-} else {
-  console.log("Document already loaded, initializing immediately");
-  initApp();
+console.log("Starting application initialization...");
+
+try {
+  const rootElement = document.getElementById('root');
+  
+  if (!rootElement) {
+    console.error("Root element not found! Unable to mount the application.");
+    throw new Error("Missing root element");
+  }
+
+  console.log("Root element found with ID:", rootElement.id);
+  
+  // Create and render the application
+  console.log("Creating React root and rendering application...");
+  const root = createRoot(rootElement);
+  root.render(
+    <ErrorBoundary>
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    </ErrorBoundary>
+  );
+  
+  console.log("Application rendered successfully");
+} catch (error) {
+  console.error("Fatal error during application initialization:", error);
 }
 
 // Global error handler
 window.addEventListener('error', (event) => {
   console.error("Global error caught:", event.error);
 });
+
+console.log("Application initialization complete");
