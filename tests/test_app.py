@@ -9,6 +9,12 @@ from fastapi.testclient import TestClient
 parent_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_dir))
 
+# Add both app module paths explicitly to ensure they can be found
+backend_dir = parent_dir / "backend"
+kmai_dir = parent_dir / "kmai_ent03_ui_app"
+sys.path.insert(0, str(backend_dir))
+sys.path.insert(0, str(kmai_dir))
+
 # Print debug info
 print(f"Current directory: {os.getcwd()}")
 print(f"Python path: {sys.path}")
@@ -50,6 +56,34 @@ if not app_import_success:
     except ImportError as e:
         print(f"Could not import from kmai_ent03_ui_app package: {e}")
 
+# If all imports failed, try to find app.py files directly
+if not app_import_success:
+    print("Direct import attempts failed, trying to locate app.py files...")
+    backend_app_path = backend_dir / "app.py"
+    kmai_app_path = kmai_dir / "app.py"
+    
+    if backend_app_path.exists():
+        print(f"Found app.py at {backend_app_path}, attempting manual import")
+        sys.path.insert(0, str(backend_app_path.parent))
+        try:
+            import app as backend_app_module
+            app = backend_app_module.app
+            app_import_success = True
+            print("Successfully imported app via direct file import from backend")
+        except ImportError as e:
+            print(f"Manual import from {backend_app_path} failed: {e}")
+    
+    if not app_import_success and kmai_app_path.exists():
+        print(f"Found app.py at {kmai_app_path}, attempting manual import")
+        sys.path.insert(0, str(kmai_app_path.parent))
+        try:
+            import app as kmai_app_module
+            app = kmai_app_module.app
+            app_import_success = True
+            print("Successfully imported app via direct file import from kmai")
+        except ImportError as e:
+            print(f"Manual import from {kmai_app_path} failed: {e}")
+
 # If all imports failed, let's check if files exist in expected locations
 if not app_import_success:
     # Check if backend/app.py exists
@@ -70,6 +104,32 @@ if not app_import_success:
     
     if len(py_files) > 10:
         print(f"  ... and {len(py_files) - 10} more files")
+    
+    # Try one more approach - dynamically load the module
+    print("Attempting dynamic module loading...")
+    import importlib.util
+    
+    if backend_app_path.exists():
+        try:
+            spec = importlib.util.spec_from_file_location("backend.app", backend_app_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            app = module.app
+            app_import_success = True
+            print("Successfully imported app via importlib from backend")
+        except Exception as e:
+            print(f"Dynamic import failed for {backend_app_path}: {e}")
+            
+    if not app_import_success and kmai_app_path.exists():
+        try:
+            spec = importlib.util.spec_from_file_location("kmai_ent03_ui_app.app", kmai_app_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            app = module.app
+            app_import_success = True
+            print("Successfully imported app via importlib from kmai")
+        except Exception as e:
+            print(f"Dynamic import failed for {kmai_app_path}: {e}")
 
 # If we still couldn't import the app, raise an error
 if not app_import_success:
