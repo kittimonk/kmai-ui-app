@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
@@ -50,38 +51,24 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// Initialize the application
-console.log("Starting application initialization...");
-
-try {
-  const rootElement = document.getElementById('root');
-  
-  if (!rootElement) {
-    console.error("Root element not found! Unable to mount the application.");
-    throw new Error("Missing root element");
-  }
-
-  console.log("Root element found with ID:", rootElement.id);
-  
-  // Create and render the application
-  console.log("Creating React root and rendering application...");
+// Make sure we have only ONE root element for React
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  console.error("Root element not found! Unable to mount the application.");
+} else {
+  console.log("Root element found, rendering application...");
   const root = createRoot(rootElement);
   root.render(
-    <ErrorBoundary>
-      <React.StrictMode>
+    <React.StrictMode>
+      <ErrorBoundary>
         <App />
-      </React.StrictMode>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </React.StrictMode>
   );
-  
   console.log("Application rendered successfully");
-} catch (error) {
-  console.error("Fatal error during application initialization:", error);
 }
 
-// Global error handler
+// Global error handler for uncaught errors
 window.addEventListener('error', (event) => {
   console.error("Global error caught:", event.error);
 });
-
-console.log("Application initialization complete");
