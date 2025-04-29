@@ -139,7 +139,7 @@ echo "Current directory structure (package directory):"
 find . -type f -name "*.py" | sort
 
 echo "Current directory structure (parent directory):"
-find .. -maxdepth 3 -type f -name "*.py" | sort
+find .. -maxdepth 2 -type f -name "*.py" | sort
 
 # Use either pytest or unittest, depending on what's installed
 echo "Running tests..."

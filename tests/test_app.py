@@ -57,7 +57,9 @@ except ImportError as e:
         for f in os.listdir('.'):
             print(f"  {f}")
         print("Available directories:")
-        print(f"Directories available: {[d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d))]}")
+        for d in os.listdir(parent_dir):
+            if os.path.isdir(os.path.join(parent_dir, d)):
+                print(f"  {d}")
         raise ImportError("Could not import app from any expected location")
 
 class TestApp(unittest.TestCase):
