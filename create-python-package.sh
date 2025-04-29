@@ -208,7 +208,8 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
 EOL
-echo "Created default app.py"
+  echo "Created default app.py"
+fi
 
 # Create a better test file that properly imports the app
 echo "Creating test files..."
@@ -388,10 +389,6 @@ setup(
         "console_scripts": [
             "kmai-ent03-ui-app=${PKG_NAME}.app:app",
         ]
-#    entry_points={
-#        "console_scripts": [
-#            "runserver=app:app",
-#        ]     
     },
 )
 EOL
