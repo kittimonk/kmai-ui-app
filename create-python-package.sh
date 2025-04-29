@@ -211,9 +211,9 @@ EOL
   echo "Created default app.py"
 fi
 
-# Create a better test file that properly imports the app
+# Create an improved test file that properly imports the app
 echo "Creating test files..."
-cat > "$PKG_DIR/tests/test_app.py" << EOL
+cat > "$PKG_DIR/tests/test_app.py" << 'EOL'
 import os
 import sys
 import unittest
@@ -222,41 +222,73 @@ from fastapi.testclient import TestClient
 
 # Add the parent directory to the Python path to make imports work
 parent_dir = Path(__file__).parent.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
+sys.path.insert(0, str(parent_dir))
 
-# Try different import paths to find the app
+# Print debug info
+print(f"Current directory: {os.getcwd()}")
+print(f"Python path: {sys.path}")
+print(f"Looking for app and database modules...")
+
+# Create a flag to track import success
+app_import_success = False
+database_import_success = False
+
+# Try different import approaches
 try:
-    # Try importing from the package first
-    from ${PKG_NAME}.app import app
-    # Also try to import database functions
+    # First try: Import from backend package
+    from backend.app import app
+    print("Successfully imported app from backend package")
+    app_import_success = True
+    
     try:
-        from ${PKG_NAME}.database import initialize_chat_history_table, initialize_feature_interaction_table
-        print("Successfully imported database functions from package")
+        from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
+        print("Successfully imported database functions from backend package")
+        database_import_success = True
     except ImportError as e:
-        print(f"Warning: Could not import database functions from package: {e}")
-except ImportError:
+        print(f"Warning: Could not import database from backend package: {e}")
+except ImportError as e:
+    print(f"Could not import from backend package: {e}")
+
+# If backend package import failed, try kmai_ent03_ui_app package
+if not app_import_success:
     try:
-        # If we're not in the package structure, try direct import
-        from backend.app import app
-        # Try to import database functions
+        from kmai_ent03_ui_app.app import app
+        print("Successfully imported app from kmai_ent03_ui_app package")
+        app_import_success = True
+        
         try:
-            from backend.database import initialize_chat_history_table, initialize_feature_interaction_table
-            print("Successfully imported database functions from backend")
+            from kmai_ent03_ui_app.database import initialize_chat_history_table, initialize_feature_interaction_table
+            print("Successfully imported database functions from kmai_ent03_ui_app package")
+            database_import_success = True
         except ImportError as e:
-            print(f"Warning: Could not import database functions from backend: {e}")
+            print(f"Warning: Could not import database from kmai_ent03_ui_app package: {e}")
     except ImportError as e:
-        # Print detailed diagnostic information
-        print(f"ERROR: Could not import app module: {e}")
-        print(f"Current PYTHONPATH: {sys.path}")
-        print(f"Current directory: {os.getcwd()}")
-        print("Directories in current location:")
-        for root, dirs, files in os.walk(".", topdown=True):
-            if root == "." or len(root.split(os.sep)) <= 2:  # Limit depth
-                print(f"  {root}: {dirs}")
-                if 'app.py' in files or 'database.py' in files:
-                    print(f"    Found relevant files: {[f for f in files if f in ['app.py', 'database.py']]}")
-        raise ImportError("Could not import app from any expected location")
+        print(f"Could not import from kmai_ent03_ui_app package: {e}")
+
+# If all imports failed, let's check if files exist in expected locations
+if not app_import_success:
+    # Check if backend/app.py exists
+    backend_app_path = parent_dir / "backend" / "app.py"
+    if backend_app_path.exists():
+        print(f"Found app.py at {backend_app_path}, but couldn't import it")
+    
+    # Check if kmai_ent03_ui_app/app.py exists
+    kmai_app_path = parent_dir / "kmai_ent03_ui_app" / "app.py"
+    if kmai_app_path.exists():
+        print(f"Found app.py at {kmai_app_path}, but couldn't import it")
+    
+    # Find all .py files in the project to help debugging
+    print("Available Python files in project:")
+    py_files = list(parent_dir.glob("**/*.py"))
+    for py_file in py_files[:10]:  # Limit to first 10 to avoid too much output
+        print(f"  {py_file.relative_to(parent_dir)}")
+    
+    if len(py_files) > 10:
+        print(f"  ... and {len(py_files) - 10} more files")
+
+# If we still couldn't import the app, raise an error
+if not app_import_success:
+    raise ImportError("Could not import app module from any location. Tests cannot continue.")
 
 class TestApp(unittest.TestCase):
     def setUp(self):
@@ -265,8 +297,9 @@ class TestApp(unittest.TestCase):
         
         # Look for static directory in multiple places
         self.static_dirs = [
-            self.package_dir / "${PKG_NAME}" / "static",
+            self.package_dir / "kmai_ent03_ui_app" / "static",
             self.package_dir / "static",
+            self.package_dir / "backend" / "static",
         ]
         
         # Find the first existing static directory
@@ -300,6 +333,21 @@ if __name__ == "__main__":
     unittest.main()
 EOL
 echo "Created test_app.py"
+
+# Also make a copy of the backend folder to help with imports
+if [ -d "backend" ]; then
+    echo "Copying backend directory structure to package..."
+    mkdir -p "$PKG_DIR/backend"
+    cp -r backend/* "$PKG_DIR/backend/"
+    
+    # Create __init__.py in the backend folder if it doesn't exist
+    if [ ! -f "$PKG_DIR/backend/__init__.py" ]; then
+        echo "# This file makes the backend directory a proper Python package" > "$PKG_DIR/backend/__init__.py"
+        echo "version = \"1.0.5\"" >> "$PKG_DIR/backend/__init__.py"
+    fi
+    
+    echo "Backend directory copied successfully"
+fi
 
 # Create a proper pytest.ini file to help configure tests
 echo "Creating pytest.ini..."
@@ -360,6 +408,7 @@ setup(
     install_requires=requires,
     package_data={
         "${PKG_NAME}": ["static/*", "static/**/*"],
+        "backend": ["*.py"],
     },
     include_package_data=True,
     entry_points={
