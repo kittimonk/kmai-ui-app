@@ -32,6 +32,7 @@ setup(
     install_requires=requires,
     package_data={
         "kmai_ent03_ui_app": ["static/*", "static/**/*"],
+        "backend": ["*.py"],
     },
     include_package_data=True,
     entry_points={
