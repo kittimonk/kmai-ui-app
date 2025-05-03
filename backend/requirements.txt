@@ -18,3 +18,4 @@ redis==5.0.1
 pymssql==2.2.8
 striprtf==0.0.18
 azure-search-documents==11.4.0
+databricks-sdk==0.22.0

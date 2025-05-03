@@ -1,4 +1,3 @@
-
 import asyncio
 import os, subprocess, time
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
@@ -36,6 +35,9 @@ from backend.database import (
     get_user_chat_history,
     get_user_feature_history
 )
+
+# Import the Databricks utilities
+from backend.databricks_utils import test_connection, execute_sql_query, get_databricks_client
 
 # Azure Configuration
 subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "210da3-aff")
@@ -744,6 +746,81 @@ if static_dir.exists():
     print(f"Static files mounted from: {static_dir}")
 else:
     print("WARNING: Could not mount static files - directory doesn\'t exist")
+
+# ----------------------------
+# Databricks Integration Endpoints
+# ----------------------------
+@app.get("/api/databricks/test")
+async def test_databricks_connection():
+    """
+    Test endpoint to verify connection to Azure Databricks
+    """
+    try:
+        result = test_connection()
+        if result.get("status") == "error":
+            return JSONResponse(
+                status_code=500,
+                content=result
+            )
+        return result
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+@app.get("/api/databricks/clusters")
+async def list_databricks_clusters():
+    """
+    List all available clusters in Databricks workspace
+    """
+    try:
+        client = get_databricks_client()
+        clusters = list(client.clusters.list())
+        
+        # Format the response
+        cluster_list = []
+        for cluster in clusters:
+            cluster_list.append({
+                "cluster_id": cluster.cluster_id,
+                "cluster_name": cluster.cluster_name,
+                "state": cluster.state,
+                "creator": cluster.creator_user_name,
+                "spark_version": cluster.spark_version
+            })
+            
+        return {
+            "clusters": cluster_list,
+            "count": len(cluster_list)
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+class SQLQueryRequest(BaseModel):
+    query: str
+    cluster_id: Optional[str] = None
+
+@app.post("/api/databricks/query")
+async def execute_query(request: SQLQueryRequest):
+    """
+    Execute a SQL query on Databricks
+    """
+    try:
+        result = execute_sql_query(request.query, request.cluster_id)
+        if not result.get("success"):
+            return JSONResponse(
+                status_code=500,
+                content=result
+            )
+        return result
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
 
 if __name__ == "__main__":
     import uvicorn
