@@ -16,17 +16,22 @@ def main():
     
     # Check for environment variables
     workspace_url = os.environ.get("DATABRICKS_WORKSPACE_URL")
+    tenant_id = os.environ.get("AZURE_TENANT_ID")
+    client_id = os.environ.get("AZURE_CLIENT_ID")
+    client_secret = os.environ.get("AZURE_CLIENT_SECRET")
     cluster_id = os.environ.get("DATABRICKS_CLUSTER_ID")
     
-    if not workspace_url:
-        print("WARNING: DATABRICKS_WORKSPACE_URL environment variable is not set!")
-    else:
-        print(f"Using Databricks workspace: {workspace_url}")
+    # Print status of required environment variables
+    print("Required Environment Variables:")
+    print(f"  DATABRICKS_WORKSPACE_URL: {'✓ Set' if workspace_url else '✗ NOT SET'}")
+    print(f"  AZURE_TENANT_ID: {'✓ Set' if tenant_id else '✗ NOT SET'}")
+    print(f"  AZURE_CLIENT_ID: {'✓ Set' if client_id else '✗ NOT SET'}")
+    print(f"  AZURE_CLIENT_SECRET: {'✓ Set' if client_secret else '✗ NOT SET (SENSITIVE)'}")
+    print(f"  DATABRICKS_CLUSTER_ID: {'✓ Set' if cluster_id else '✗ NOT SET (Optional)'}")
     
-    if not cluster_id:
-        print("NOTE: DATABRICKS_CLUSTER_ID environment variable is not set (optional for some operations)")
-    else:
-        print(f"Using Databricks cluster ID: {cluster_id}")
+    if not all([workspace_url, tenant_id, client_id, client_secret]):
+        print("\n❌ ERROR: Missing required environment variables. Please set them before testing.")
+        return
     
     print("\n1. Testing connection...")
     try:

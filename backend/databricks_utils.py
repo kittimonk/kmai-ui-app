@@ -2,7 +2,7 @@
 """
 Utility functions for connecting to Azure Databricks
 """
-from azure.identity import DefaultAzureCredential
+from azure.identity import ClientSecretCredential
 from databricks.sdk import WorkspaceClient
 import os
 import logging
@@ -13,21 +13,36 @@ logger = logging.getLogger(__name__)
 
 def get_databricks_client():
     """
-    Get a Databricks WorkspaceClient using Azure Managed Identity
+    Get a Databricks WorkspaceClient using Azure Service Principal (OAuth)
     """
     try:
-        # Get the workspace URL from environment variables
+        # Get the required configuration from environment variables
         workspace_url = os.environ.get("DATABRICKS_WORKSPACE_URL")
+        tenant_id = os.environ.get("AZURE_TENANT_ID")
+        client_id = os.environ.get("AZURE_CLIENT_ID")
+        client_secret = os.environ.get("AZURE_CLIENT_SECRET")
+        
+        # Validate required environment variables
         if not workspace_url:
             raise ValueError("DATABRICKS_WORKSPACE_URL environment variable is not set")
+        if not tenant_id:
+            raise ValueError("AZURE_TENANT_ID environment variable is not set")
+        if not client_id:
+            raise ValueError("AZURE_CLIENT_ID environment variable is not set")
+        if not client_secret:
+            raise ValueError("AZURE_CLIENT_SECRET environment variable is not set")
             
-        # Use Azure Default Credential (same as for other Azure services)
-        credential = DefaultAzureCredential()
+        # Create a credential using client credentials flow
+        credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
         
-        # Create and return the client - note: parameter is now 'azure_ad_token' instead of 'azure_credential'
+        # Create and return the client using OAuth
         client = WorkspaceClient(
             host=workspace_url,
-            azure_ad_token=credential.get_token("2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default").token
+            auth_type="azure-cli"
         )
         
         return client
