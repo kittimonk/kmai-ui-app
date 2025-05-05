@@ -73,7 +73,7 @@ async def test_databricks_connection():
         result = test_connection()
         logger.info(f"Connection test result: {result}")
         if result.get("status") == "error":
-            return HTTPException(
+            raise HTTPException(
                 status_code=500,
                 detail=result
             )
@@ -92,7 +92,7 @@ async def list_databricks_clusters():
         logger.info("Fetching Databricks clusters...")
         result = list_clusters()
         if result.get("status") == "error":
-            return HTTPException(
+            raise HTTPException(
                 status_code=500,
                 detail=result
             )
@@ -111,7 +111,7 @@ async def execute_query(request: SQLQueryRequest):
         logger.info(f"Executing SQL query: {request.query}")
         result = execute_sql_query(request.query, request.cluster_id)
         if not result.get("success"):
-            return HTTPException(
+            raise HTTPException(
                 status_code=500,
                 detail=result
             )

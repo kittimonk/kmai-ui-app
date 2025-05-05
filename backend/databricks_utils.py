@@ -24,10 +24,10 @@ def get_databricks_client():
         # Use Azure Default Credential (same as for other Azure services)
         credential = DefaultAzureCredential()
         
-        # Create and return the client
+        # Create and return the client - note: parameter is now 'azure_ad_token' instead of 'azure_credential'
         client = WorkspaceClient(
             host=workspace_url,
-            azure_credential=credential
+            azure_ad_token=credential.get_token("2ff814a6-3304-4ab8-85cb-cd0e6f879c1d/.default").token
         )
         
         return client
