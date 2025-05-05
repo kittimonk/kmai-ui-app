@@ -7,6 +7,7 @@ from databricks.sdk import WorkspaceClient
 import os
 import logging
 import time
+from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,37 @@ def test_connection():
         }
     except Exception as e:
         logger.error(f"Databricks connection test failed: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+def list_clusters() -> Dict[str, Any]:
+    """
+    List all available clusters in the Databricks workspace
+    """
+    try:
+        client = get_databricks_client()
+        clusters = list(client.clusters.list())
+        
+        # Format the response
+        cluster_list = []
+        for cluster in clusters:
+            cluster_list.append({
+                "cluster_id": cluster.cluster_id,
+                "cluster_name": cluster.cluster_name,
+                "state": cluster.state,
+                "creator": cluster.creator_user_name,
+                "spark_version": cluster.spark_version
+            })
+            
+        return {
+            "clusters": cluster_list,
+            "count": len(cluster_list),
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Error listing Databricks clusters: {str(e)}")
         return {
             "status": "error",
             "message": str(e)
