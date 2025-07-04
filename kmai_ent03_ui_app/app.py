@@ -26,20 +26,20 @@ import sys
 from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
-from vault import VaultConfig, VaultService
+from kmai_ent03_ui_app.vault import VaultConfig, VaultService
 
 # Add the parent directory to sys.path to make backend importable
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our database module
-from backend.database import (
-    initialize_chat_history_table, 
-    initialize_feature_interaction_table,
-    log_chat_interaction, 
-    log_feature_interaction,
-    get_user_chat_history,
-    get_user_feature_history
-)
+#from backend.database import (
+    #initialize_chat_history_table, 
+    #initialize_feature_interaction_table,
+    #log_chat_interaction, 
+    #log_feature_interaction,
+    #get_user_chat_history,
+    #get_user_feature_history
+#)
 
 # Azure Configuration
 subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "210da3-aff")
@@ -61,35 +61,21 @@ vault_service = VaultService(config)
 current_environment = os.getenv("ENV", "test")
 malcode = os.getenv("MALCODE", "mail")
 if current_environment in ["local", "test"]:
-    application = os.getenv("APPLICATION")
+    application = "nt03-eastus-as-km-tkm01-02"
     parts = application.split("-")
     if parts[3].lower() == "kmai":
         path = os.getenv(f"VAULT_{parts[4].upper()}_PATH", "") + os.getenv(
-            "RELATIVEPATH", "/src"
+            "RELATIVEPATH", "/grc"
         )
     else:
         path = os.getenv(f"VAULT_{malcode.upper()}_PATH", "") + os.getenv(
-            "RELATIVEPATH", "/src"
+            "RELATIVEPATH", "/grc"
         )
 
 OIDC_CLIENT_ID = vault_service.get_secret("OIDC_CLIENT_ID", path)
 OIDC_CLIENT_SECRET = vault_service.get_secret("OIDC_CLIENT_SECRET", path)
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
 OIDC_CALLBACK_URL = "https://kma03.dev.com/sso"
-
-subscription_id = "2f8-4920-aaa4-b8bf2c7"
-client_id = "a7-643d-4940-a07d-acddc1"
-object_id = "644-b246-4165-8786-4d8d"
-openai_resource_group_name, openai_account_name = (
-    "d03-eastus-ka-openai-727",
-    "d03-eastus-ka-openai-727",
-)
-
-openai_api_version, openai_embedding_model, openai_lang_model = (
-    "2024-10-21",
-    "text-embedding-3-small",
-    "gpt-4o-2024-05-13-tpm",
-)
 
 search_service = "https://d03-eastus-km-search-893.search.windows.net"
 search_index_name = "gptenterprise031index"
@@ -237,10 +223,10 @@ def optimize_content_for_tokens(content, max_length=10000):
     return f"{beginning}\n\n[...{len(content) - max_length} characters truncated...]\n\n{end}"
 
 # Initialize the database tables
-@app.on_event("startup")
-async def startup_db_client():
-    initialize_chat_history_table()
-    initialize_feature_interaction_table()
+#@app.on_event("startup")
+#async def startup_db_client():
+    #initialize_chat_history_table()
+    #initialize_feature_interaction_table()
 
 # Function to get user ID from request
 def get_user_id(
