@@ -22,7 +22,7 @@ export type AuthState = {
 // Updated implementation
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       isLoading: false,
@@ -80,10 +80,18 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       logout: () => {
-        set({ user: null, isAuthenticated: false });
+        // Call backend logout endpoint
+        fetch('/logout', { method: 'GET', credentials: 'include' })
+          .then(() => {
+            set({ user: null, isAuthenticated: false });
+          })
+          .catch(() => {
+            // Still clear frontend state even if backend call fails
+            set({ user: null, isAuthenticated: false });
+          });
       },
       setUser: (user: User) => {
-        set({ user, isAuthenticated: true }); // Set user and mark as authenticated
+        set({ user, isAuthenticated: true });
       },
     }),
     {
@@ -92,3 +100,26 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Add function to check auth status with backend
+export const checkAuthStatus = async () => {
+  try {
+    const response = await fetch('/api/auth/status', {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    
+    if (data.isAuthenticated && data.user) {
+      useAuthStore.getState().setUser({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.user.email}`
+      });
+    } else {
+      useAuthStore.setState({ user: null, isAuthenticated: false });
+    }
+  } catch (error) {
+    console.error('Failed to check auth status:', error);
+  }
+};

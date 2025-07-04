@@ -116,7 +116,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=secure_random_key,
     max_age=14 * 24 * 3600,  # Cookie lifetime in seconds
-    https_only=True,  # Send only over HTTPS
+    https_only=False,  # Set to False for local development
     same_site="lax"  # Use "strict" to prevent CSRF
 )
 
@@ -801,6 +801,235 @@ Rewrite the remediation plan in a clear, structured format.
         )
         raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
 
+# ----------------------------
+# NEW REMEDIATION VALIDATOR ENDPOINT  
+# ----------------------------
+@app.post("/api/remediation/validate")
+async def process_remediation_files(
+    remediationPlan: Optional[UploadFile] = File(None),
+    complianceRequirements: Optional[UploadFile] = File(None),
+    findingsDetails: Optional[UploadFile] = File(None),
+    remediationPlan_content: Optional[str] = Form(None),
+    complianceRequirements_content: Optional[str] = Form(None),
+    findingsDetails_content: Optional[str] = Form(None),
+    customPrompt: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None)
+):
+    """
+    Enhanced remediation validation endpoint with detailed analysis
+    """
+    if not any([
+        remediationPlan, complianceRequirements, findingsDetails,
+        remediationPlan_content, complianceRequirements_content, findingsDetails_content
+    ]):
+        raise HTTPException(status_code=400, detail="No files or content were provided")
+
+    # If no user_id provided in form, get from header
+    if not user_id or not session_id:
+        user_info = get_user_id()
+        user_id = user_id or user_info.get("user_id")
+        session_id = session_id or user_info.get("session_id")
+    
+    start_time = time.time()
+    file_contents = {}
+
+    # Process files or content
+    if remediationPlan_content:
+        file_contents["remediation_plan"] = remediationPlan_content
+    elif remediationPlan:
+        content = await remediationPlan.read()
+        content_str = content.decode("utf-8", errors="ignore")
+        if remediationPlan.filename.lower().endswith('.rtf'):
+            content_str = rtf_to_text(content_str)
+        file_contents["remediation_plan"] = optimize_content_for_tokens(content_str)
+    
+    if complianceRequirements_content:
+        file_contents["compliance_requirements"] = complianceRequirements_content
+    elif complianceRequirements:
+        content = await complianceRequirements.read()
+        content_str = content.decode("utf-8", errors="ignore")
+        if complianceRequirements.filename.lower().endswith('.rtf'):
+            content_str = rtf_to_text(content_str)
+        file_contents["compliance_requirements"] = optimize_content_for_tokens(content_str)
+
+    if findingsDetails_content:
+        file_contents["findings_details"] = findingsDetails_content
+    elif findingsDetails:
+        content = await findingsDetails.read()
+        content_str = content.decode("utf-8", errors="ignore")
+        if findingsDetails.filename.lower().endswith('.rtf'):
+            content_str = rtf_to_text(content_str)
+        file_contents["findings_details"] = optimize_content_for_tokens(content_str)
+
+    # Enhanced system prompt for detailed analysis
+    system_prompt = """You are a Senior GRC Analyst, Risk Control Auditor, and an expert in compliance and remediation analysis specialized in audit remediation review.
+Your task is to evaluate remediation plans against compliance requirements and identify any potential gaps or issues for improvement based on provided documents.
+
+Rules:
+1. Follow the quality guidelines provided in the quality control guidelines document and validate the remediation plan strictly based on the guidelines.
+2. Determine if the Remediation plan adequately addresses all quality requirements provided.
+3. Do not assume or hallucinate missing information - only base your assessment on the content provided.
+
+Return the response like this:
+- **Control ID**
+- **Finding Details**
+- **Remediation Details**
+- **Does the remediation plan fulfill all the compliance requirements? (Yes/No)**
+- **Are there any gaps or missing elements in the plan?**
+- **Could auditors potentially flag this plan as duplicate or invalid? If so, why?**
+- **Specific recommendations to improve the remediation plan.**
+- **Overall compliance score (out of 100) and justification.**
+- **Issues found: List of issues by dimension, including severity and recommendations**
+- **Compliance Review: Policy Alignment details.**
+- **Gap Analysis**
+- **Suggestions for improvements**
+- **Final Rating:** Good / Needs Improvement / Bad***"""
+
+    # Custom prompt handling
+    if customPrompt:
+        system_prompt = customPrompt
+
+    # Build the user prompt with file contents
+    user_prompt = "Please analyze the following documents:\n\n"
+    for file_type, content in file_contents.items():
+        user_prompt += f"**{file_type.upper().replace('_', ' ')}:**\n{content}\n\n"
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-2024-05-13-tpm",
+            temperature=0.3,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream=False,
+            max_tokens=request.max_tokens if 'request' in locals() else 3000
+        )
+        
+        reply_content = response.choices[0].message.content.strip()
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+        
+        # Log feature interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_validation",
+            input_data=f"Remediation validation with {len(file_contents)} documents",
+            output_data=reply_content,
+            endpoint_used="/api/remediation/validate",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id,
+            metadata={"file_types": list(file_contents.keys())}
+        )
+        
+        return JSONResponse(content={"response": reply_content})
+        
+    except Exception as e:
+        print(f"Error calling OpenAI: {str(e)}")
+        # Log failed interaction
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_validation",
+            input_data=f"Remediation validation with {len(file_contents)} documents",
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/api/remediation/validate",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e), "file_types": list(file_contents.keys())}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
+
+@app.post("/api/remediation/rewrite")
+async def rewrite_remediation(
+    remediationPlan: UploadFile = File(...),
+    analysisContext: str = Form(...),
+    action: str = Form(...),
+    user_id: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None)
+):
+    # Check if the action is rewrite
+    if action != "rewrite":
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Invalid action: {action}. Expected 'rewrite'"}
+        )
+        
+    # If no user_id provided in form, get from header
+    if not user_id or not session_id:
+        user_info = get_user_id()
+        user_id = user_id or user_info.get("user_id")
+        session_id = session_id or user_info.get("session_id")
+    
+    start_time = time.time()
+    
+    # Read and process the remediation plan file
+    content = await remediationPlan.read()
+    file_content = content.decode("utf-8")
+    if remediationPlan.filename.lower().endswith('.rtf'):
+        file_content = rtf_to_text(file_content)
+    
+    # Optimize content to ensure it fits within token limits
+    optimized_plan = optimize_content_for_tokens(file_content, 2000)
+    
+    # Use lower limits to leave room for prompt
+    # Create a system prompt that guides the rewrite
+    system_prompt = """
+You are a compliance expert tasked with improving a remediation plan based on analysis feedback.
+Consider compliance requirements, timelines, accountability, and validation steps.
+Rewrite the remediation plan in a clear, structured format.
+Focus on:
+1. Ensure all compliance requirements are fully addressed
+2. Include clear timelines and ownership for each action
+3. Add specific metrics for measuring success
+4. Include validation steps to verify effectiveness
+5. Consider budget and resource constraints
+Rewrite the remediation plan to address the analysis feedback while maintaining the original scope.
+Format your response as a well-structured remediation plan with clear sections.
+"""
+    
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-2024-05-13-tpm",
+            temperature=0.7,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the original remediation plan:\n\n{optimized_plan}\n\nHere is the analysis feedback:\n\n{analysisContext}\n\nPlease rewrite the remediation plan to address all the issues mentioned in the analysis."}
+            ],
+            stream=False
+        )
+        
+        # Extract the rewritten plan from the API response
+        rewritten_plan = response.choices[0].message.content
+        
+        # Return the rewritten plan
+        return {
+            "rewrittenPlan": rewritten_plan,
+            "originalLength": len(file_content),
+            "rewrittenLength": len(rewritten_plan)
+        }
+        
+    except Exception as e:
+        print(f"Error rewriting remediation plan: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to rewrite remediation plan: {str(e)}"}
+        )
+
+def optimize_content_for_tokens(content: str, max_tokens: int = 3000) -> str:
+    """Optimize content to fit within token limits."""
+    estimated_tokens = estimate_token_count(content)
+    if estimated_tokens <= max_tokens:
+        return content
+    
+    # For very long content, keep beginning and end
+    char_limit = max_tokens * 4
+    half_max = char_limit // 2
+    beginning = content[:half_max]
+    end = content[-half_max:]
+    return f"{beginning}\n\n[...{estimated_tokens - max_tokens} tokens truncated...]\n\n{end}"
+
 #Determine the static directory path
 static_dir = Path(__file__).parent / "static"
 #Mount static files - only if directory exists
@@ -811,17 +1040,70 @@ if static_dir.exists():
 else:
     print("WARNING: Could not mount static files - directory doesn\'t exist")
 
-# # Middleware to enforce authentication and validate AD group membership
+# Authentication status endpoint for frontend
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    """Check authentication status for frontend"""
+    user = request.session.get("user")
+    if user:
+        return {
+            "isAuthenticated": True,
+            "user": {
+                "id": user.get("sub", "unknown"),
+                "email": user.get("email", ""),
+                "name": user.get("name", user.get("preferred_username", "")),
+                "groups": user.get("groups", [])
+            }
+        }
+    return {"isAuthenticated": False, "user": None}
+
+# Middleware to enforce authentication and validate AD group membership
 @app.middleware("http")
 async def enforce_authentication(request: Request, call_next):
-    print("Executing enforce_authentication middleware")
+    # Skip authentication for certain routes
+    excluded_paths = [
+        "/login", 
+        "/sso", 
+        "/logout", 
+        "/health", 
+        "/api/health",
+        "/api/auth/status",
+        "/docs",
+        "/redoc",
+        "/openapi.json"
+    ]
+    
+    # Skip authentication for static files
+    if (request.url.path.startswith("/static/") or 
+        request.url.path.startswith("/assets/") or
+        request.url.path.endswith((".css", ".js", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".ttf", ".eot")) or
+        request.url.path in excluded_paths or
+        request.url.path == "/"):
+        return await call_next(request)
+    
+    print(f"Executing enforce_authentication middleware for path: {request.url.path}")
     user = request.session.get("user")
+    
     if not user:
+        if request.url.path.startswith("/api/"):
+            return JSONResponse(
+                status_code=401, 
+                content={"error": "Authentication required"}
+            )
         return RedirectResponse(url="/login")
+    
     print("User info:", user)
     required_group = "TKMAI_KM03_RO"
-    if required_group not in user.get("groups", []):
+    user_groups = user.get("groups", [])
+    
+    if required_group not in user_groups:
+        if request.url.path.startswith("/api/"):
+            return JSONResponse(
+                status_code=403, 
+                content={"error": "User not authorized - missing required group"}
+            )
         raise HTTPException(status_code=403, detail="User not authorized")
+    
     return await call_next(request)
 
 # Login endpoint
@@ -852,115 +1134,6 @@ async def protected(request: Request):
         return {"message": "Protected content", "user": user}
     return RedirectResponse(url="/login")
 
-class ChatRequest(BaseModel):
-    prompt: str
-    max_tokens: int = 10000
-
-def estimate_token_count(text: str) -> int:
-    """Estimate token count. Roughly 4 chars per token for English text."""
-    return len(text) // 4
-
-async def generate_embedding(user_prompt: str) -> list:
-    try:
-        response = await client.embeddings.create(
-            model=openai_embedding_model, input=[user_prompt]
-        )
-        return response.data[0].embedding
-    except Exception as e:
-        raise RuntimeError(f"Embedding generation failed: {str(e)}")
-
-# Step 2: Run Vector Search
-def fetch_vector_search_results(embedding: list):
-    try:
-        results = search_client.search(
-            search_text="",  # required but ignored during vector search
-            vector_queries=[
-                {
-                    "kind": "vector",
-                    "vector": embedding,
-                    "fields": "contentVector",
-                    "k_nearest_neighbors": 5,
-                }
-            ],
-            select=["content", "sourcefile"],
-        )
-        return [
-            {"content": doc["content"], "source": doc["sourcefile"]} for doc in results
-        ]
-    except Exception as e:
-        raise RuntimeError(f"Vector search failed: {str(e)}")
-
-# Step 3: Full Endpoint
-@app.post("/chat/context")
-async def chat(request: ChatRequest):
-    user_prompt = request.prompt
-    print("Request: ", user_prompt)
-    payload = {
-        "messages": [{"role": "user", "content": user_prompt}],
-        "max_tokens": request.max_tokens,
-    }
-
-    embedding = await generate_embedding(user_prompt)
-    loop = asyncio.get_running_loop()
-    matched_docs = await loop.run_in_executor(
-        None, fetch_vector_search_results, embedding
-    )
-    context_chunks = [doc["content"] for doc in matched_docs]
-    context = "\n\n".join(context_chunks)
-    messages = [
-        {
-            "role": "system",
-            "content": "You are a helpful assistant from Enterprise Data Product Team. Answer a summary only based on the provided context from the Enterprise Data Products (EDP) Documents.",
-        },
-        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {user_prompt}"},
-    ]
-    print("messages (Context): ", messages)
-    response = await client.chat.completions.create(
-        model=openai_lang_model, messages=messages
-    )
-
-    reply = {
-        "answer": response.choices[0].message.content.strip(),
-        "citations": matched_docs,
-    }
-    print("reply: ", reply)
-    return reply
-
-@app.get("/")
-def read_root():
-    return {"message": "CORS is enabled!"}
-print("Inside OpenAI Scala")
-c = CognitiveServicesManagementClient(credential=msi, subscription_id=subscription_id)
-# print("OpenAI list deployments", list(c.deployments.list(openai_resource_group_name, openai_account_name)))
-token = get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
-
-# # print("OpenAI embeddings", client.embeddings.create(input=["The quick brown fox jumped over the lazy dog"], model=openai_embedding_model).data[0].embedding[:3])
-
-@app.post("/chat")
-async def chat(request: ChatRequest):
-    print("Request: ", request.prompt)
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {
-        "messages": [{"role": "user", "content": request.prompt}],
-        "max_tokens": request.max_tokens,
-    }
-
-    response = await client.chat.completions.create(
-        model="gpt-4o-2024-05-13-tpm",
-        temperature=0.3,
-        messages=[{"role": "user", "content": request.prompt}],
-        stream=False,
-    )
-    # if response.status_code != 200:
-    #    raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
-    # if response.status_code != 200:
-    #    raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
-
-class ArcherRequest(BaseModel):
-    prompt: str
-    max_tokens: int = 100
 
 if __name__ == "__main__":
     import uvicorn
