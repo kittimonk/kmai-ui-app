@@ -107,6 +107,11 @@ export const checkAuthStatus = async () => {
     const response = await fetch('/api/auth/status', {
       credentials: 'include'
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
     const data = await response.json();
     
     if (data.isAuthenticated && data.user) {
@@ -121,5 +126,7 @@ export const checkAuthStatus = async () => {
     }
   } catch (error) {
     console.error('Failed to check auth status:', error);
+    // Don't change auth state if backend is not available
+    // This allows the app to work in offline/development mode
   }
 };
