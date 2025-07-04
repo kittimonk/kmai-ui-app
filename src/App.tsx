@@ -19,7 +19,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import SSOCallback from "./pages/SSOCallback";
-import { checkAuthStatus } from "@/services/auth"; // ✅ Import this!
+import { checkAuthStatus } from "@/services/auth"; // ✅ Import added
 
 // Add custom CSS for styling
 import "./styles/custom.css";
@@ -27,7 +27,7 @@ import "./styles/custom.css";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // ✅ On mount, verify if user is authenticated via SSO
+  // ✅ Ensure we sync backend auth state on first load (including after SSO redirect)
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -41,46 +41,70 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/chat" element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            } />
-            <Route path="/converter" element={
-              <ProtectedRoute>
-                <CodeConverter />
-              </ProtectedRoute>
-            } />
-            <Route path="/explainer" element={
-              <ProtectedRoute>
-                <CodeExplainer />
-              </ProtectedRoute>
-            } />
-            <Route path="/remediation" element={
-              <ProtectedRoute>
-                <RemediationOnCoach />
-              </ProtectedRoute>
-            } />
-            <Route path="/ingestion" element={
-              <ProtectedRoute>
-                <DocumentIngestion />
-              </ProtectedRoute>
-            } />
-            <Route path="/knowledge" element={
-              <ProtectedRoute>
-                <KnowledgeBase />
-              </ProtectedRoute>
-            } />
-            <Route path="/login" element={
-              <PublicOnlyRoute>
-                <Login />
-              </PublicOnlyRoute>
-            } />
-            <Route path="/register" element={
-              <PublicOnlyRoute>
-                <Register />
-              </PublicOnlyRoute>
-            } />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <Chat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/converter"
+              element={
+                <ProtectedRoute>
+                  <CodeConverter />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/explainer"
+              element={
+                <ProtectedRoute>
+                  <CodeExplainer />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/remediation"
+              element={
+                <ProtectedRoute>
+                  <RemediationOnCoach />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ingestion"
+              element={
+                <ProtectedRoute>
+                  <DocumentIngestion />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/knowledge"
+              element={
+                <ProtectedRoute>
+                  <KnowledgeBase />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <Login />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <PublicOnlyRoute>
+                  <Register />
+                </PublicOnlyRoute>
+              }
+            />
             <Route path="/sso/callback" element={<SSOCallback />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
