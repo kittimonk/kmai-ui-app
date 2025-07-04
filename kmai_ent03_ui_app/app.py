@@ -3,6 +3,7 @@ import os, subprocess, time
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
+from azure.search.documents.indexes.models import SimpleField
 from openai import AzureOpenAI
 from azure.search.documents import SearchClient
 from pydantic import BaseModel
@@ -13,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi import Request, Form, FastAPI, HTTPException, UploadFile, File, Depends, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from typing import List, Dict, Optional
 import re
 import json
@@ -22,6 +23,10 @@ from striprtf.striprtf import rtf_to_text
 from pathlib import Path
 import time
 import sys
+from authlib.integrations.starlette_client import OAuth
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
+from vault import VaultConfig, VaultService
 
 # Add the parent directory to sys.path to make backend importable
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,9 +40,6 @@ from backend.database import (
     get_user_chat_history,
     get_user_feature_history
 )
-
-# Import the Databricks utilities
-from backend.databricks_utils import test_connection, execute_sql_query, get_databricks_client
 
 # Azure Configuration
 subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "210da3-aff")
@@ -53,13 +55,75 @@ search_service = "https://nt03-eastus-km-search-9893.search.windows.net"
 search_index_name = "gptentern01index"
 msi = DefaultAzureCredential()
 
-# Initialize FastAPI
-app = FastAPI()
+# Vault configuration
+config = VaultConfig()
+vault_service = VaultService(config)
+current_environment = os.getenv("ENV", "test")
+malcode = os.getenv("MALCODE", "mail")
+if current_environment in ["local", "test"]:
+    application = os.getenv("APPLICATION")
+    parts = application.split("-")
+    if parts[3].lower() == "kmai":
+        path = os.getenv(f"VAULT_{parts[4].upper()}_PATH", "") + os.getenv(
+            "RELATIVEPATH", "/src"
+        )
+    else:
+        path = os.getenv(f"VAULT_{malcode.upper()}_PATH", "") + os.getenv(
+            "RELATIVEPATH", "/src"
+        )
 
-# Configure CORS more explicitly
+OIDC_CLIENT_ID = vault_service.get_secret("OIDC_CLIENT_ID", path)
+OIDC_CLIENT_SECRET = vault_service.get_secret("OIDC_CLIENT_SECRET", path)
+OIDC_AUTHORITY = "https://fedsit.rastest.ca"
+OIDC_CALLBACK_URL = "https://kma03.dev.com/sso"
+
+subscription_id = "2f8-4920-aaa4-b8bf2c7"
+client_id = "a7-643d-4940-a07d-acddc1"
+object_id = "644-b246-4165-8786-4d8d"
+openai_resource_group_name, openai_account_name = (
+    "d03-eastus-ka-openai-727",
+    "d03-eastus-ka-openai-727",
+)
+
+openai_api_version, openai_embedding_model, openai_lang_model = (
+    "2024-10-21",
+    "text-embedding-3-small",
+    "gpt-4o-2024-05-13-tpm",
+)
+
+search_service = "https://d03-eastus-km-search-893.search.windows.net"
+search_index_name = "gptenterprise031index"
+msi = DefaultAzureCredential()
+
+# OAuth configuration
+oauth = OAuth()
+oauth.register(
+    name="oidc",
+    client_id=OIDC_CLIENT_ID,
+    client_secret=OIDC_CLIENT_SECRET,
+    server_metadata_url=f"{OIDC_AUTHORITY}/.well-known/openid-configuration",
+    client_kwargs={
+        "scope": "openid CustomMemberOf",
+    },
+)
+
+# Initialize FastAPI app
+app = FastAPI(debug=True)
+
+# Add SessionMiddleware early in the middleware stack
+secure_random_key = secrets.token_hex(32)  # Generates a secure random key
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=secure_random_key,
+    max_age=14 * 24 * 3600,  # Cookie lifetime in seconds
+    https_only=True,  # Send only over HTTPS
+    same_site="lax"  # Use "strict" to prevent CSRF
+)
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, you'd want to be more specific
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -747,80 +811,156 @@ if static_dir.exists():
 else:
     print("WARNING: Could not mount static files - directory doesn\'t exist")
 
-# ----------------------------
-# Databricks Integration Endpoints
-# ----------------------------
-@app.get("/api/databricks/test")
-async def test_databricks_connection():
-    """
-    Test endpoint to verify connection to Azure Databricks
-    """
-    try:
-        result = test_connection()
-        if result.get("status") == "error":
-            return JSONResponse(
-                status_code=500,
-                content=result
-            )
-        return result
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": str(e)}
-        )
+# # Middleware to enforce authentication and validate AD group membership
+@app.middleware("http")
+async def enforce_authentication(request: Request, call_next):
+    print("Executing enforce_authentication middleware")
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse(url="/login")
+    print("User info:", user)
+    required_group = "TKMAI_KM03_RO"
+    if required_group not in user.get("groups", []):
+        raise HTTPException(status_code=403, detail="User not authorized")
+    return await call_next(request)
 
-@app.get("/api/databricks/clusters")
-async def list_databricks_clusters():
-    """
-    List all available clusters in Databricks workspace
-    """
-    try:
-        client = get_databricks_client()
-        clusters = list(client.clusters.list())
-        
-        # Format the response
-        cluster_list = []
-        for cluster in clusters:
-            cluster_list.append({
-                "cluster_id": cluster.cluster_id,
-                "cluster_name": cluster.cluster_name,
-                "state": cluster.state,
-                "creator": cluster.creator_user_name,
-                "spark_version": cluster.spark_version
-            })
-            
-        return {
-            "clusters": cluster_list,
-            "count": len(cluster_list)
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": str(e)}
-        )
+# Login endpoint
+@app.get("/login")
+async def login(request: Request):
+    redirect_uri = OIDC_CALLBACK_URL
+    return await oauth.oidc.authorize_redirect(request, redirect_uri)
 
-class SQLQueryRequest(BaseModel):
-    query: str
-    cluster_id: Optional[str] = None
+# SSO callback endpoint
+@app.get("/sso", name="auth_callback")
+async def auth_callback(request: Request):
+    token = await oauth.oidc.authorize_access_token(request)
+    user = token["user_info"]
+    request.session["user"] = dict(user)
+    return RedirectResponse(url="/")
 
-@app.post("/api/databricks/query")
-async def execute_query(request: SQLQueryRequest):
-    """
-    Execute a SQL query on Databricks
-    """
+# Logout endpoint
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login")
+
+# Protected endpoint example
+@app.get("/protected")
+async def protected(request: Request):
+    user = request.session.get("user")
+    if user:
+        return {"message": "Protected content", "user": user}
+    return RedirectResponse(url="/login")
+
+class ChatRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 10000
+
+def estimate_token_count(text: str) -> int:
+    """Estimate token count. Roughly 4 chars per token for English text."""
+    return len(text) // 4
+
+async def generate_embedding(user_prompt: str) -> list:
     try:
-        result = execute_sql_query(request.query, request.cluster_id)
-        if not result.get("success"):
-            return JSONResponse(
-                status_code=500,
-                content=result
-            )
-        return result
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": str(e)}
+        response = await client.embeddings.create(
+            model=openai_embedding_model, input=[user_prompt]
         )
+        return response.data[0].embedding
+    except Exception as e:
+        raise RuntimeError(f"Embedding generation failed: {str(e)}")
+
+# Step 2: Run Vector Search
+def fetch_vector_search_results(embedding: list):
+    try:
+        results = search_client.search(
+            search_text="",  # required but ignored during vector search
+            vector_queries=[
+                {
+                    "kind": "vector",
+                    "vector": embedding,
+                    "fields": "contentVector",
+                    "k_nearest_neighbors": 5,
+                }
+            ],
+            select=["content", "sourcefile"],
+        )
+        return [
+            {"content": doc["content"], "source": doc["sourcefile"]} for doc in results
+        ]
+    except Exception as e:
+        raise RuntimeError(f"Vector search failed: {str(e)}")
+
+# Step 3: Full Endpoint
+@app.post("/chat/context")
+async def chat(request: ChatRequest):
+    user_prompt = request.prompt
+    print("Request: ", user_prompt)
+    payload = {
+        "messages": [{"role": "user", "content": user_prompt}],
+        "max_tokens": request.max_tokens,
+    }
+
+    embedding = await generate_embedding(user_prompt)
+    loop = asyncio.get_running_loop()
+    matched_docs = await loop.run_in_executor(
+        None, fetch_vector_search_results, embedding
+    )
+    context_chunks = [doc["content"] for doc in matched_docs]
+    context = "\n\n".join(context_chunks)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant from Enterprise Data Product Team. Answer a summary only based on the provided context from the Enterprise Data Products (EDP) Documents.",
+        },
+        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {user_prompt}"},
+    ]
+    print("messages (Context): ", messages)
+    response = await client.chat.completions.create(
+        model=openai_lang_model, messages=messages
+    )
+
+    reply = {
+        "answer": response.choices[0].message.content.strip(),
+        "citations": matched_docs,
+    }
+    print("reply: ", reply)
+    return reply
+
+@app.get("/")
+def read_root():
+    return {"message": "CORS is enabled!"}
+print("Inside OpenAI Scala")
+c = CognitiveServicesManagementClient(credential=msi, subscription_id=subscription_id)
+# print("OpenAI list deployments", list(c.deployments.list(openai_resource_group_name, openai_account_name)))
+token = get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
+
+# # print("OpenAI embeddings", client.embeddings.create(input=["The quick brown fox jumped over the lazy dog"], model=openai_embedding_model).data[0].embedding[:3])
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    print("Request: ", request.prompt)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "messages": [{"role": "user", "content": request.prompt}],
+        "max_tokens": request.max_tokens,
+    }
+
+    response = await client.chat.completions.create(
+        model="gpt-4o-2024-05-13-tpm",
+        temperature=0.3,
+        messages=[{"role": "user", "content": request.prompt}],
+        stream=False,
+    )
+    # if response.status_code != 200:
+    #    raise HTTPException(status_code=response.status_code, detail=response.text)
+    return response.json()
+    # if response.status_code != 200:
+    #    raise HTTPException(status_code=response.status_code, detail=response.text)
+    return response.json()
+
+class ArcherRequest(BaseModel):
+    prompt: str
+    max_tokens: int = 100
 
 if __name__ == "__main__":
     import uvicorn
