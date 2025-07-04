@@ -110,15 +110,42 @@ oauth.register(
 # Initialize FastAPI app
 app = FastAPI(debug=True)
 
-# Add SessionMiddleware early in the middleware stack
-secure_random_key = secrets.token_hex(32)  # Generates a secure random key
+# Add SessionMiddleware
+secure_random_key = secrets.token_hex(32)
 app.add_middleware(
     SessionMiddleware,
     secret_key=secure_random_key,
-    max_age=14 * 24 * 3600,  # Cookie lifetime in seconds
-    https_only=False,  # Set to False for local development
-    same_site="lax"  # Use "strict" to prevent CSRF
+    max_age=14 * 24 * 3600,
+    https_only=False,
+    same_site="lax"
 )
+
+# Session middleware to check authentication
+@app.middleware("http")
+async def session_middleware(request: Request, call_next):
+    # Skip middleware for static files, auth routes, and health checks
+    if (request.url.path.startswith("/static") or 
+        request.url.path.startswith("/assets") or
+        request.url.path in ["/", "/login", "/logout", "/sso/callback", "/health", "/api/health"] or
+        request.url.path.startswith("/api/auth") or
+        request.url.path.endswith(".js") or
+        request.url.path.endswith(".css") or
+        request.url.path.endswith(".ico") or
+        request.url.path.endswith(".png") or
+        request.url.path.endswith(".svg")):
+        response = await call_next(request)
+        return response
+    
+    # Check if user is authenticated for protected routes
+    user = request.session.get("user")
+    if not user and not request.url.path.startswith("/docs") and not request.url.path.startswith("/openapi"):
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Authentication required"}
+        )
+    
+    response = await call_next(request)
+    return response
 
 # Add CORS middleware
 app.add_middleware(
@@ -151,20 +178,27 @@ search_client = SearchClient(
     credential=msi,
 )
 
-# ----------------------------
 # Request Models
-# ----------------------------
 class ChatRequest(BaseModel):
-    message: str  # Changed from 'prompt' to 'message' to match frontend
+    message: str
     max_tokens: int = 10000
     user_id: Optional[str] = None
     session_id: Optional[str] = None
 
-# ----------------------------
+class CodeExplainRequest(BaseModel):
+    code: str
+    action: str = "explain"
+    max_tokens: int = 300
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+class RemediationRequest(BaseModel):
+    code: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+
 # Utility Functions
-# ----------------------------
 def estimate_token_count(text: str) -> int:
-    """Estimate token count. Roughly 4 chars per token for English text."""
     return len(text) // 4
 
 async def generate_embedding(user_prompt: str) -> list:
@@ -180,7 +214,7 @@ async def generate_embedding(user_prompt: str) -> list:
 def fetch_vector_search_results(embedding: list):
     try:
         results = search_client.search(
-            search_text="",  # required but ignored during vector search
+            search_text="",
             vector_queries=[{"kind": "vector", "vector": embedding, "fields": "contentVector", "k_nearest_neighbors": 5}],
             select=["content", "sourcefile"]
         )
@@ -213,35 +247,98 @@ def get_user_id(
     x_user_id: Optional[str] = Header(None),
     x_session_id: Optional[str] = Header(None)
 ):
-    """Extract user ID from header or generate a temporary one"""
     user_id = x_user_id or "anonymous"
     session_id = x_session_id or str(uuid.uuid4())
     return {"user_id": user_id, "session_id": session_id}
 
-# ----------------------------
-# HEALTH CHECK ENDPOINTS
-# ----------------------------
+# Authentication endpoints
+@app.get("/login")
+async def login(request: Request):
+    redirect_uri = request.url_for("auth_callback")
+    return await oauth.oidc.authorize_redirect(request, redirect_uri)
+
+@app.get("/sso/callback")
+async def auth_callback(request: Request):
+    try:
+        token = await oauth.oidc.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        
+        if user_info:
+            # Extract user groups from the token
+            groups = user_info.get("CustomMemberOf", [])
+            
+            # Check if user is in allowed groups
+            allowed_groups = ["CN=GPT_Enterprise_Dev,OU=Groups,DC=test,DC=ca"]
+            
+            if any(group in allowed_groups for group in groups):
+                # Store user info in session
+                request.session["user"] = {
+                    "id": user_info.get("sub"),
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                    "groups": groups
+                }
+                return RedirectResponse(url="/sso/callback")
+            else:
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "Access denied: User not in allowed groups"}
+                )
+        else:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication failed"}
+            )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Authentication error: {str(e)}"}
+        )
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    user = request.session.get("user")
+    if user:
+        return {
+            "isAuthenticated": True,
+            "user": {
+                "id": user.get("id"),
+                "email": user.get("email"),
+                "name": user.get("name")
+            }
+        }
+    else:
+        return {"isAuthenticated": False, "user": None}
+
+# Protected endpoint to get user info
+@app.get("/protected")
+async def protected_route(request: Request):
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    return {"user": user}
+
+# Health check endpoints
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy", 
-        "service": "kmai-app"
-    }
+    return {"status": "healthy", "service": "kmai-app"}
 
 @app.get("/api/health")
 def api_health():
     return {"status": "ok", "message": "API server is running"}
 
-# ----------------------------
-# Update for explicit API access from frontend
-# ----------------------------
+# Options route for CORS
 @app.options("/api/{rest_of_path:path}")
 async def options_route(rest_of_path: str):
-    return {}  # Enable CORS preflight for all /api routes
+    return {}
 
-# ----------------------------
-# HISTORY ENDPOINTS
-# ----------------------------
+# History endpoints
 @app.get("/api/chat/history")
 async def get_chat_history(user_info: dict = Depends(get_user_id)):
     user_id = user_info.get("user_id")
@@ -263,9 +360,7 @@ async def get_feature_history(
     history = get_user_feature_history(user_id, feature_type)
     return {"history": history}
 
-# ----------------------------
-# CHAT ENDPOINTS
-# ----------------------------
+# Chat endpoints
 @app.post("/chat/context")
 async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     user_prompt = request.message
@@ -295,7 +390,6 @@ async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Log the interaction to the database
         log_chat_interaction(
             user_id=user_id,
             user_message=user_prompt,
@@ -314,7 +408,6 @@ async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_
         return reply
     except Exception as e:
         print(f"Error in chat_context: {str(e)}")
-        # Still log failed interactions
         log_chat_interaction(
             user_id=user_id,
             user_message=user_prompt,
@@ -326,7 +419,6 @@ async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_
         )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-# Updated chat endpoint: expects JSON payload matching ChatRequest model
 @app.post("/api/chat")
 async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     user_prompt = request.message
@@ -344,12 +436,10 @@ async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id))
             stream=False
         )
         
-        # Extract the response content
         ai_response = response.choices[0].message.content
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Log the interaction to the database
         log_chat_interaction(
             user_id=user_id,
             user_message=user_prompt,
@@ -363,7 +453,6 @@ async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id))
         return {"response": ai_response}
     except Exception as e:
         print(f"Error in chat_api: {str(e)}")
-        # Still log failed interactions
         log_chat_interaction(
             user_id=user_id,
             user_message=user_prompt,
@@ -375,9 +464,7 @@ async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id))
         )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-# ----------------------------
-# CODE CONVERTER ENDPOINT
-# ----------------------------
+# Code converter endpoint
 @app.post("/converter/")
 async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     print("Converter request message:", request.message)
@@ -403,7 +490,6 @@ async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Log feature interaction
         log_feature_interaction(
             user_id=user_id,
             feature_type="code_converter",
@@ -418,7 +504,6 @@ async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)
         return {"response": output_response}
     except Exception as e:
         print(f"Error in code converter: {str(e)}")
-        # Log failed interactions
         log_feature_interaction(
             user_id=user_id,
             feature_type="code_converter",
@@ -431,16 +516,7 @@ async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)
         )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-# ----------------------------
-# CODE EXPLAINER ENDPOINT
-# ----------------------------
-class CodeExplainRequest(BaseModel):
-    code: str
-    action: str = "explain"
-    max_tokens: int = 300
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-
+# Code explainer endpoint
 @app.post("/code-explainer/")
 async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(get_user_id)):
     print("Received code explain request for action:", request.action)
@@ -484,657 +560,233 @@ async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Log feature interaction
         log_feature_interaction(
             user_id=user_id,
-            feature_type=f"code_explainer_{request.action}",
+            feature_type="code_explainer",
             input_data=request.code,
             output_data=output_response,
             endpoint_used="/code-explainer",
             processing_time=processing_time,
             tokens_used=tokens_used,
-            session_id=session_id
+            session_id=session_id,
+            metadata={"action": request.action}
         )
         
-        return output_response
+        return {"response": output_response}
     except Exception as e:
         print(f"Error in code explainer: {str(e)}")
-        # Log failed interactions
         log_feature_interaction(
             user_id=user_id,
-            feature_type=f"code_explainer_{request.action}",
+            feature_type="code_explainer",
             input_data=request.code,
             output_data=f"Error: {str(e)}",
             endpoint_used="/code-explainer",
             processing_time=time.time() - start_time,
             session_id=session_id,
-            metadata={"error": str(e)}
+            metadata={"action": request.action, "error": str(e)}
         )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-# ----------------------------
-# KNOWLEDGE BASE ENDPOINT
-# ----------------------------
-class KnowledgeBaseRequest(BaseModel):
-    message: str
-    max_tokens: int = 1000
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-
-@app.post("/api/knowledge-base/query")
-async def query_knowledge_base(request: KnowledgeBaseRequest, user_info: dict = Depends(get_user_id)):
+# Remediation endpoints
+@app.post("/remediation/validate/")
+async def remediation_validate(request: RemediationRequest, user_info: dict = Depends(get_user_id)):
     user_id = request.user_id or user_info.get("user_id")
     session_id = request.session_id or user_info.get("session_id")
     start_time = time.time()
     
-    try:
-        # Generate embeddings for the query
-        embedding = await generate_embedding(request.message)
-        
-        # Use the embeddings to search the knowledge base
-        loop = asyncio.get_running_loop()
-        search_results = await loop.run_in_executor(None, fetch_vector_search_results, embedding)
-        
-        # Format and return the results
-        output_response = {
-            "query": request.message,
-            "results": search_results
-        }
-        
-        processing_time = time.time() - start_time
-        
-        # Log the knowledge base query
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="knowledge_base",
-            input_data=request.message,
-            output_data=str(search_results),
-            endpoint_used="/api/knowledge-base/query",
-            processing_time=processing_time,
-            session_id=session_id,
-            metadata={"result_count": len(search_results)}
-        )
-        
-        return output_response
-    except Exception as e:
-        print(f"Error in knowledge base query: {str(e)}")
-        # Log failed interactions
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="knowledge_base",
-            input_data=request.message,
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/api/knowledge-base/query",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
-
-# ----------------------------
-# Archer / Remediation Endpoints
-# ----------------------------
-class ArcherRequest(BaseModel):
-    prompt: str
-    max_tokens: int = 100
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-
-def ignore_rtf_to_text(rtf_content):
-    text = re.sub(r'^\{\\rtf1.*\}\s*', '', rtf_content)
-    text = re.sub(r'\\[a-zA-Z0-9]+(-?[0-9]+)?\\s?', '', text)
-    text = re.sub(r'\\\'[0-9a-fA-F]{2}', '', text)
-    prev_text = ""
-    while prev_text != text:
-        prev_text = text
-        text = re.sub(r'\\\{.*?\\\}', '', text)
-    text = re.sub(r'\\par\s?', '\n', text)
-    text = re.sub(r'\\line\s?', '\n', text)
-    text = re.sub(r'\\[a-z]+', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\n\s*\n', '\n\n', text)
-    text = re.sub(r'\\([{}\\])', r'\1', text)
-    return text.strip()
-
-@app.post("/archer/")
-async def process_remediation_files(
-    remediationPlan: Optional[UploadFile] = File(None),
-    complianceRequirements: Optional[UploadFile] = File(None),
-    findingsDetails: Optional[UploadFile] = File(None),
-    remediationPlan_content: Optional[str] = Form(None),
-    complianceRequirements_content: Optional[str] = Form(None),
-    findingsDetails_content: Optional[str] = Form(None),
-    customPrompt: Optional[str] = Form(None),
-    user_id: Optional[str] = Form(None),
-    session_id: Optional[str] = Form(None)
-):
-    if not any([
-        remediationPlan, complianceRequirements, findingsDetails,
-        remediationPlan_content, complianceRequirements_content, findingsDetails_content
-    ]):
-        raise HTTPException(status_code=400, detail="No files or content were provided")
-
-    # If no user_id provided in form, get from header
-    if not user_id or not session_id:
-        user_info = get_user_id()
-        user_id = user_id or user_info.get("user_id")
-        session_id = session_id or user_info.get("session_id")
+    system_prompt = """You are a cybersecurity expert specializing in code vulnerability analysis.
+    Analyze the provided code for potential security vulnerabilities and provide detailed findings.
     
-    start_time = time.time()
-    file_contents = {}
-
-    if remediationPlan_content:
-        file_contents["remediation_plan"] = remediationPlan_content
-    elif remediationPlan:
-        content = await remediationPlan.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if remediationPlan.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["remediation_plan"] = optimize_content_for_tokens(content_str)
+    Your response should include:
+    1. Overall risk assessment (High/Medium/Low)
+    2. Specific vulnerabilities found with line numbers
+    3. Brief explanation of each vulnerability
+    4. Recommended fixes
     
-    if complianceRequirements_content:
-        file_contents["compliance_requirements"] = complianceRequirements_content
-    elif complianceRequirements:
-        content = await complianceRequirements.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if complianceRequirements.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["compliance_requirements"] = optimize_content_for_tokens(content_str)
-
-    if findingsDetails_content:
-        file_contents["findings_details"] = findingsDetails_content
-    elif findingsDetails:
-        content = await findingsDetails.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if findingsDetails.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["findings_details"] = optimize_content_for_tokens(content_str)
-
-    prompt = customPrompt if customPrompt else """
-Below is an audit finding and the associated remediation plan.
-Please analyze the remediation plan and determine if it adequately addresses the compliance requirements
-and findings details provided. Provide your assessment with clear, actionable feedback.
-Return the response with clear sections for:
-- Control ID
-- Finding Details
-- Remediation Details
-- Overall Risk Score
-- Confidence Score
-- Compliance Status
-- Identified Gaps
-- Recommendations
-- Final Rating
-"""
-
-    total_content_length = sum(len(content) for content in file_contents.values())
-    if total_content_length > 30000:
-        scale_factor = 30000 / total_content_length
-        for file_type, content in file_contents.items():
-            max_len = int(len(content) * scale_factor)
-            file_contents[file_type] = optimize_content_for_tokens(content, max_len)
-
-    for file_type, content in file_contents.items():
-        prompt += f"\n\n{file_type.upper()}:\n{content}"
-
-    try:
-        api_url = f"https://{openai_account_name}.openai.azure.com/openai/deployments/gpt-4o-2024-05-13-tpm/chat/completions?api-version=2023-01-01-preview"
-        print("apiUrl::", api_url)
-        response = await client.chat.completions.create(
-            model="gpt-4o-2024-05-13-tpm",
-            temperature=0,
-            messages=[
-                {"role": "system", "content": "You are a strict GRC Analyst and expert in compliance. Evaluate remediation plans against provided documents and return detailed feedback."},
-                {"role": "user", "content": prompt}
-            ],
-            stream=False
-        )
-        reply_content = response.choices[0].message.content.strip()
-        
-        processing_time = time.time() - start_time
-        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
-        
-        # Log feature interaction
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_analysis",
-            input_data=f"Remediation plan analysis with {len(file_contents)} documents",
-            output_data=reply_content,
-            endpoint_used="/archer",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id,
-            metadata={"file_types": list(file_contents.keys())}
-        )
-        
-        return JSONResponse(content={"response": reply_content})
-    except Exception as e:
-        print(f"Error calling OpenAI: {str(e)}")
-        # Log failed interaction
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_analysis",
-            input_data=f"Remediation plan analysis with {len(file_contents)} documents",
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/archer",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e), "file_types": list(file_contents.keys())}
-        )
-        raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
-
-@app.post("/archer/rewrite")
-async def rewrite_remediation(
-    remediationPlan: UploadFile = File(...),
-    analysisContext: str = Form(...),
-    action: str = Form(...),
-    user_id: Optional[str] = Form(None),
-    session_id: Optional[str] = Form(None)
-):
-    if action != "rewrite":
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"Invalid action: {action}. Expected 'rewrite'"}
-        )
-        
-    # If no user_id provided in form, get from header
-    if not user_id or not session_id:
-        user_info = get_user_id()
-        user_id = user_id or user_info.get("user_id")
-        session_id = session_id or user_info.get("session_id")
+    Format your response as structured text that can be easily parsed."""
     
-    start_time = time.time()
+    user_prompt = f"Analyze this code for security vulnerabilities:\n\n{request.code}"
     
-    content = await remediationPlan.read()
-    file_content = content.decode("utf-8")
-    if remediationPlan.filename.lower().endswith('.rtf'):
-        file_content = rtf_to_text(file_content)
-    optimized_plan = optimize_content_for_tokens(file_content, 2000)
-    system_prompt = """
-You are a compliance expert tasked with improving a remediation plan based on analysis feedback.
-Consider compliance requirements, timelines, accountability, and validation steps.
-Rewrite the remediation plan in a clear, structured format.
-"""
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-2024-05-13-tpm",
-            temperature=0.7,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the original remediation plan:\n\n{optimized_plan}\n\nHere is the analysis feedback:\n\n{analysisContext}\n\nPlease rewrite the remediation plan to address all issues."}
-            ],
-            stream=False
-        )
-        rewritten_plan = response.choices[0].message.content
-        
-        processing_time = time.time() - start_time
-        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
-        
-        # Log feature interaction
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_rewrite",
-            input_data=f"Original plan: {optimized_plan[:200]}... + Analysis context",
-            output_data=rewritten_plan,
-            endpoint_used="/archer/rewrite",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id
-        )
-        
-        return {
-            "rewrittenPlan": rewritten_plan,
-            "originalLength": len(file_content),
-            "rewrittenLength": len(rewritten_plan)
-        }
-    except Exception as e:
-        print(f"Error in remediation rewrite: {str(e)}")
-        # Log failed interaction
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_rewrite",
-            input_data=f"Original plan + Analysis context",
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/archer/rewrite",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
-        raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
-
-# ----------------------------
-# NEW REMEDIATION VALIDATOR ENDPOINT  
-# ----------------------------
-@app.post("/api/remediation/validate")
-async def process_remediation_files(
-    remediationPlan: Optional[UploadFile] = File(None),
-    complianceRequirements: Optional[UploadFile] = File(None),
-    findingsDetails: Optional[UploadFile] = File(None),
-    remediationPlan_content: Optional[str] = Form(None),
-    complianceRequirements_content: Optional[str] = Form(None),
-    findingsDetails_content: Optional[str] = Form(None),
-    customPrompt: Optional[str] = Form(None),
-    user_id: Optional[str] = Form(None),
-    session_id: Optional[str] = Form(None)
-):
-    """
-    Enhanced remediation validation endpoint with detailed analysis
-    """
-    if not any([
-        remediationPlan, complianceRequirements, findingsDetails,
-        remediationPlan_content, complianceRequirements_content, findingsDetails_content
-    ]):
-        raise HTTPException(status_code=400, detail="No files or content were provided")
-
-    # If no user_id provided in form, get from header
-    if not user_id or not session_id:
-        user_info = get_user_id()
-        user_id = user_id or user_info.get("user_id")
-        session_id = session_id or user_info.get("session_id")
-    
-    start_time = time.time()
-    file_contents = {}
-
-    # Process files or content
-    if remediationPlan_content:
-        file_contents["remediation_plan"] = remediationPlan_content
-    elif remediationPlan:
-        content = await remediationPlan.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if remediationPlan.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["remediation_plan"] = optimize_content_for_tokens(content_str)
-    
-    if complianceRequirements_content:
-        file_contents["compliance_requirements"] = complianceRequirements_content
-    elif complianceRequirements:
-        content = await complianceRequirements.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if complianceRequirements.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["compliance_requirements"] = optimize_content_for_tokens(content_str)
-
-    if findingsDetails_content:
-        file_contents["findings_details"] = findingsDetails_content
-    elif findingsDetails:
-        content = await findingsDetails.read()
-        content_str = content.decode("utf-8", errors="ignore")
-        if findingsDetails.filename.lower().endswith('.rtf'):
-            content_str = rtf_to_text(content_str)
-        file_contents["findings_details"] = optimize_content_for_tokens(content_str)
-
-    # Enhanced system prompt for detailed analysis
-    system_prompt = """You are a Senior GRC Analyst, Risk Control Auditor, and an expert in compliance and remediation analysis specialized in audit remediation review.
-Your task is to evaluate remediation plans against compliance requirements and identify any potential gaps or issues for improvement based on provided documents.
-
-Rules:
-1. Follow the quality guidelines provided in the quality control guidelines document and validate the remediation plan strictly based on the guidelines.
-2. Determine if the Remediation plan adequately addresses all quality requirements provided.
-3. Do not assume or hallucinate missing information - only base your assessment on the content provided.
-
-Return the response like this:
-- **Control ID**
-- **Finding Details**
-- **Remediation Details**
-- **Does the remediation plan fulfill all the compliance requirements? (Yes/No)**
-- **Are there any gaps or missing elements in the plan?**
-- **Could auditors potentially flag this plan as duplicate or invalid? If so, why?**
-- **Specific recommendations to improve the remediation plan.**
-- **Overall compliance score (out of 100) and justification.**
-- **Issues found: List of issues by dimension, including severity and recommendations**
-- **Compliance Review: Policy Alignment details.**
-- **Gap Analysis**
-- **Suggestions for improvements**
-- **Final Rating:** Good / Needs Improvement / Bad***"""
-
-    # Custom prompt handling
-    if customPrompt:
-        system_prompt = customPrompt
-
-    # Build the user prompt with file contents
-    user_prompt = "Please analyze the following documents:\n\n"
-    for file_type, content in file_contents.items():
-        user_prompt += f"**{file_type.upper().replace('_', ' ')}:**\n{content}\n\n"
-
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-2024-05-13-tpm",
+            model=openai_lang_model,
             temperature=0.3,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            stream=False,
-            max_tokens=request.max_tokens if 'request' in locals() else 3000
+            stream=False
         )
         
-        reply_content = response.choices[0].message.content.strip()
+        analysis_result = response.choices[0].message.content.strip()
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Log feature interaction
         log_feature_interaction(
             user_id=user_id,
-            feature_type="remediation_validation",
-            input_data=f"Remediation validation with {len(file_contents)} documents",
-            output_data=reply_content,
-            endpoint_used="/api/remediation/validate",
+            feature_type="remediation_validate",
+            input_data=request.code,
+            output_data=analysis_result,
+            endpoint_used="/remediation/validate",
             processing_time=processing_time,
             tokens_used=tokens_used,
-            session_id=session_id,
-            metadata={"file_types": list(file_contents.keys())}
+            session_id=session_id
         )
         
-        return JSONResponse(content={"response": reply_content})
-        
+        return {"analysis": analysis_result}
     except Exception as e:
-        print(f"Error calling OpenAI: {str(e)}")
-        # Log failed interaction
+        print(f"Error in remediation validate: {str(e)}")
         log_feature_interaction(
             user_id=user_id,
-            feature_type="remediation_validation",
-            input_data=f"Remediation validation with {len(file_contents)} documents",
+            feature_type="remediation_validate",
+            input_data=request.code,
             output_data=f"Error: {str(e)}",
-            endpoint_used="/api/remediation/validate",
+            endpoint_used="/remediation/validate",
             processing_time=time.time() - start_time,
             session_id=session_id,
-            metadata={"error": str(e), "file_types": list(file_contents.keys())}
+            metadata={"error": str(e)}
         )
-        raise HTTPException(status_code=500, detail=f"Error processing with OpenAI: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-@app.post("/api/remediation/rewrite")
-async def rewrite_remediation(
-    remediationPlan: UploadFile = File(...),
-    analysisContext: str = Form(...),
-    action: str = Form(...),
-    user_id: Optional[str] = Form(None),
-    session_id: Optional[str] = Form(None)
-):
-    # Check if the action is rewrite
-    if action != "rewrite":
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"Invalid action: {action}. Expected 'rewrite'"}
-        )
-        
-    # If no user_id provided in form, get from header
-    if not user_id or not session_id:
-        user_info = get_user_id()
-        user_id = user_id or user_info.get("user_id")
-        session_id = session_id or user_info.get("session_id")
-    
+@app.post("/remediation/rewrite/")
+async def remediation_rewrite(request: RemediationRequest, user_info: dict = Depends(get_user_id)):
+    user_id = request.user_id or user_info.get("user_id")
+    session_id = request.session_id or user_info.get("session_id")
     start_time = time.time()
     
-    # Read and process the remediation plan file
-    content = await remediationPlan.read()
-    file_content = content.decode("utf-8")
-    if remediationPlan.filename.lower().endswith('.rtf'):
-        file_content = rtf_to_text(file_content)
+    system_prompt = """You are a cybersecurity expert and senior software engineer.
+    Rewrite the provided code to fix all security vulnerabilities while maintaining the original functionality.
     
-    # Optimize content to ensure it fits within token limits
-    optimized_plan = optimize_content_for_tokens(file_content, 2000)
+    Your response should:
+    1. Provide the complete rewritten code
+    2. Maintain the original logic and functionality
+    3. Fix all identified security issues
+    4. Add appropriate security measures
+    5. Include comments explaining the security fixes made
     
-    # Use lower limits to leave room for prompt
-    # Create a system prompt that guides the rewrite
-    system_prompt = """
-You are a compliance expert tasked with improving a remediation plan based on analysis feedback.
-Consider compliance requirements, timelines, accountability, and validation steps.
-Rewrite the remediation plan in a clear, structured format.
-Focus on:
-1. Ensure all compliance requirements are fully addressed
-2. Include clear timelines and ownership for each action
-3. Add specific metrics for measuring success
-4. Include validation steps to verify effectiveness
-5. Consider budget and resource constraints
-Rewrite the remediation plan to address the analysis feedback while maintaining the original scope.
-Format your response as a well-structured remediation plan with clear sections.
-"""
+    Only return the rewritten code with security comments."""
+    
+    user_prompt = f"Rewrite this code to fix all security vulnerabilities:\n\n{request.code}"
     
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o-2024-05-13-tpm",
-            temperature=0.7,
+            model=openai_lang_model,
+            temperature=0.3,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the original remediation plan:\n\n{optimized_plan}\n\nHere is the analysis feedback:\n\n{analysisContext}\n\nPlease rewrite the remediation plan to address all the issues mentioned in the analysis."}
+                {"role": "user", "content": user_prompt}
             ],
             stream=False
         )
         
-        # Extract the rewritten plan from the API response
-        rewritten_plan = response.choices[0].message.content
+        rewritten_code = response.choices[0].message.content.strip()
+        processing_time = time.time() - start_time
+        tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        # Return the rewritten plan
-        return {
-            "rewrittenPlan": rewritten_plan,
-            "originalLength": len(file_content),
-            "rewrittenLength": len(rewritten_plan)
-        }
-        
-    except Exception as e:
-        print(f"Error rewriting remediation plan: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": f"Failed to rewrite remediation plan: {str(e)}"}
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_rewrite",
+            input_data=request.code,
+            output_data=rewritten_code,
+            endpoint_used="/remediation/rewrite",
+            processing_time=processing_time,
+            tokens_used=tokens_used,
+            session_id=session_id
         )
+        
+        return {"rewritten_code": rewritten_code}
+    except Exception as e:
+        print(f"Error in remediation rewrite: {str(e)}")
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="remediation_rewrite",
+            input_data=request.code,
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/remediation/rewrite",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-def optimize_content_for_tokens(content: str, max_tokens: int = 3000) -> str:
-    """Optimize content to fit within token limits."""
-    estimated_tokens = estimate_token_count(content)
-    if estimated_tokens <= max_tokens:
-        return content
+# Document ingestion endpoint
+@app.post("/ingestion/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    user_info: dict = Depends(get_user_id)
+):
+    user_id = user_info.get("user_id")
+    session_id = user_info.get("session_id")
+    start_time = time.time()
     
-    # For very long content, keep beginning and end
-    char_limit = max_tokens * 4
-    half_max = char_limit // 2
-    beginning = content[:half_max]
-    end = content[-half_max:]
-    return f"{beginning}\n\n[...{estimated_tokens - max_tokens} tokens truncated...]\n\n{end}"
-
-#Determine the static directory path
-static_dir = Path(__file__).parent / "static"
-#Mount static files - only if directory exists
-if static_dir.exists():
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
-    print(f"Static files mounted from: {static_dir}")
-else:
-    print("WARNING: Could not mount static files - directory doesn\'t exist")
-
-# Authentication status endpoint for frontend
-@app.get("/api/auth/status")
-async def auth_status(request: Request):
-    """Check authentication status for frontend"""
-    user = request.session.get("user")
-    if user:
-        return {
-            "isAuthenticated": True,
-            "user": {
-                "id": user.get("sub", "unknown"),
-                "email": user.get("email", ""),
-                "name": user.get("name", user.get("preferred_username", "")),
-                "groups": user.get("groups", [])
+    try:
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        # Process different file types
+        if file.filename.endswith('.txt'):
+            content = file_content.decode('utf-8')
+        elif file.filename.endswith('.rtf'):
+            content = rtf_to_text(file_content.decode('utf-8'))
+        else:
+            content = file_content.decode('utf-8', errors='ignore')
+        
+        processing_time = time.time() - start_time
+        
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="document_ingestion",
+            input_data=f"File: {file.filename}, Size: {file_size} bytes",
+            output_data=f"Successfully processed {len(content)} characters",
+            endpoint_used="/ingestion/upload",
+            processing_time=processing_time,
+            session_id=session_id,
+            metadata={
+                "filename": file.filename,
+                "file_size": file_size,
+                "content_length": len(content)
             }
+        )
+        
+        return {
+            "message": "File uploaded and processed successfully",
+            "filename": file.filename,
+            "size": file_size,
+            "content_preview": content[:500] + "..." if len(content) > 500 else content
         }
-    return {"isAuthenticated": False, "user": None}
+    except Exception as e:
+        print(f"Error in file upload: {str(e)}")
+        log_feature_interaction(
+            user_id=user_id,
+            feature_type="document_ingestion",
+            input_data=f"File: {file.filename if file else 'Unknown'}",
+            output_data=f"Error: {str(e)}",
+            endpoint_used="/ingestion/upload",
+            processing_time=time.time() - start_time,
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
-# Middleware to enforce authentication and validate AD group membership
-@app.middleware("http")
-async def enforce_authentication(request: Request, call_next):
-    # Skip authentication for certain routes
-    excluded_paths = [
-        "/login", 
-        "/sso", 
-        "/logout", 
-        "/health", 
-        "/api/health",
-        "/api/auth/status",
-        "/docs",
-        "/redoc",
-        "/openapi.json"
-    ]
-    
-    # Skip authentication for static files
-    if (request.url.path.startswith("/static/") or 
-        request.url.path.startswith("/assets/") or
-        request.url.path.endswith((".css", ".js", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".woff2", ".ttf", ".eot")) or
-        request.url.path in excluded_paths or
-        request.url.path == "/"):
-        return await call_next(request)
-    
-    print(f"Executing enforce_authentication middleware for path: {request.url.path}")
-    user = request.session.get("user")
-    
-    if not user:
-        if request.url.path.startswith("/api/"):
-            return JSONResponse(
-                status_code=401, 
-                content={"error": "Authentication required"}
-            )
-        return RedirectResponse(url="/login")
-    
-    print("User info:", user)
-    required_group = "TKMAI_KM03_RO"
-    user_groups = user.get("groups", [])
-    
-    if required_group not in user_groups:
-        if request.url.path.startswith("/api/"):
-            return JSONResponse(
-                status_code=403, 
-                content={"error": "User not authorized - missing required group"}
-            )
-        raise HTTPException(status_code=403, detail="User not authorized")
-    
-    return await call_next(request)
+# Static file serving
+app.mount("/static", StaticFiles(directory="dist"), name="static")
 
-# Login endpoint
-@app.get("/login")
-async def login(request: Request):
-    redirect_uri = OIDC_CALLBACK_URL
-    return await oauth.oidc.authorize_redirect(request, redirect_uri)
-
-# SSO callback endpoint
-@app.get("/sso", name="auth_callback")
-async def auth_callback(request: Request):
-    token = await oauth.oidc.authorize_access_token(request)
-    user = token["user_info"]
-    request.session["user"] = dict(user)
-    return RedirectResponse(url="/")
-
-# Logout endpoint
-@app.get("/logout")
-async def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse(url="/login")
-
-# Protected endpoint example
-@app.get("/protected")
-async def protected(request: Request):
-    user = request.session.get("user")
-    if user:
-        return {"message": "Protected content", "user": user}
-    return RedirectResponse(url="/login")
-
+# Catch-all route for frontend
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    # Serve static files
+    if full_path.startswith("assets/") or full_path.endswith(('.js', '.css', '.ico', '.png', '.svg')):
+        file_path = Path("dist") / full_path
+        if file_path.exists():
+            return FileResponse(file_path)
+    
+    # Serve index.html for all other routes (SPA)
+    return FileResponse("dist/index.html")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
