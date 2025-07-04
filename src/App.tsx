@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import React, { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -17,7 +19,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import SSOCallback from "./pages/SSOCallback";
-import { checkAuthStatus } from "@/services/auth";
+import { checkAuthStatus } from "@/services/auth"; // ✅ Import this!
 
 // Add custom CSS for styling
 import "./styles/custom.css";
@@ -25,8 +27,8 @@ import "./styles/custom.css";
 const queryClient = new QueryClient();
 
 const App = () => {
+  // ✅ On mount, verify if user is authenticated via SSO
   useEffect(() => {
-    // On app mount, check if user is already authenticated (SSO or not)
     checkAuthStatus();
   }, []);
 
