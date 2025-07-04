@@ -17,7 +17,6 @@ export type AuthState = {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
-  clearError: () => void;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -27,38 +26,45 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
+
         try {
+          // Simulate API delay for demo login
           await new Promise((resolve) => setTimeout(resolve, 1000));
-          if (email === "demo@example.com" && password === "password") {
+
+          if (email === 'demo@example.com' && password === 'password') {
             set({
               user: {
-                id: "1",
+                id: '1',
                 email,
-                name: "Demo User",
+                name: 'Demo User',
                 avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
               },
               isAuthenticated: true,
               isLoading: false,
             });
           } else {
-            throw new Error("Invalid credentials");
+            throw new Error('Invalid credentials');
           }
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "An unknown error occurred",
+            error: error instanceof Error ? error.message : 'An unknown error occurred',
             isLoading: false,
           });
         }
       },
+
       register: async (name: string, email: string, password: string) => {
         set({ isLoading: true, error: null });
+
         try {
           await new Promise((resolve) => setTimeout(resolve, 1000));
+
           set({
             user: {
-              id: "1",
+              id: '1',
               email,
               name,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
@@ -68,11 +74,12 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "An unknown error occurred",
+            error: error instanceof Error ? error.message : 'An unknown error occurred',
             isLoading: false,
           });
         }
       },
+
       logout: () => {
         fetch('/logout', { method: 'GET', credentials: 'include' })
           .then(() => {
@@ -82,38 +89,45 @@ export const useAuthStore = create<AuthState>()(
             set({ user: null, isAuthenticated: false });
           });
       },
+
       setUser: (user: User) => {
-        set({ user, isAuthenticated: true });
+        set({
+          user,
+          isAuthenticated: true,
+        });
       },
-      clearError: () => set({ error: null }),
     }),
     {
-      name: "auth-storage",
+      name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
     }
   )
 );
 
+// ✅ Optional: Call this at app startup to restore session via cookies
 export const checkAuthStatus = async () => {
   try {
     const response = await fetch('/api/auth/status', {
-      credentials: 'include'
+      credentials: 'include',
     });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
     const data = await response.json();
+
     if (data.isAuthenticated && data.user) {
+      const { id, email, name } = data.user;
+
       useAuthStore.getState().setUser({
-        id: data.user.id,
-        email: data.user.email,
-        name: data.user.name,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.user.email}`
+        id,
+        email,
+        name,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
       });
     } else {
       useAuthStore.setState({ user: null, isAuthenticated: false });
     }
   } catch (error) {
-    console.error('Failed to check auth status:', error);
+    console.error('Auth status check failed:', error);
   }
 };
