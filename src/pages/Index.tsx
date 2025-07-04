@@ -1,14 +1,25 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuthStore } from '@/services/auth';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Knowledge Management AI</h1>
-        <p className="text-lg text-gray-600">Your AI-powered knowledge management system</p>
+  const { isAuthenticated, isLoading } = useAuthStore();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading...</span>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to="/chat" replace />;
 };
 
 export default Index;
