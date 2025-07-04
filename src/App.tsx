@@ -26,10 +26,7 @@ import "./styles/custom.css";
 const queryClient = new QueryClient();
 
 const App = () => {
-  // Check authentication status on app load
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
+  // Removed checkAuthStatus call to prevent frontend breakage when backend isn't running
 
   return (
     <QueryClientProvider client={queryClient}>
