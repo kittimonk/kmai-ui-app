@@ -1,54 +1,57 @@
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/services/auth';
-import { toast } from 'sonner';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { authService } from '../services/authService';
+import { Loader2 } from 'lucide-react';
+import { checkAuthStatus } from '@/services/auth'; // ✅ Import the fix
 
-const SSOCallback = () => {
+const AuthCallback = () => {
+  const [status, setStatus] = useState('Authenticating...');
   const navigate = useNavigate();
-  const { setUser } = useAuthStore();
+  const location = useLocation();
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const handleAuth = async () => {
+      const searchParams = new URLSearchParams(location.search);
+      const code = searchParams.get('code');
+
+      if (!code) {
+        setStatus('Error: No authorization code found in the URL');
+        setTimeout(() => navigate('/'), 3000);
+        return;
+      }
+
       try {
-        // Replace '/protected' with your actual backend endpoint
-        const response = await fetch('/protected', {
-          credentials: 'include',
-        });
+        setStatus('Processing authentication...');
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+        // ✅ Call backend SSO handler (optional for logging)
+        await authService.handleCallback();
 
-        const data = await response.json();
+        // ✅ Fetch user session from backend and update Zustand
+        await checkAuthStatus();
 
-        if (data && data.user) {
-          const { id, email, name } = data.user;
-          setUser({
-            id,
-            email,
-            name,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-          });
-          toast.success(`Welcome, ${name}!`);
-          navigate('/');
-        } else {
-          throw new Error('User data not found in response');
-        }
+        setStatus('Authentication successful! Redirecting...');
+        setTimeout(() => navigate('/chat'), 1500);
       } catch (error) {
-        console.error('SSOCallback error:', error);
-        toast.error('SSO authentication failed');
-        navigate('/login');
+        console.error('Error during authentication:', error);
+        setStatus(`Authentication error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setTimeout(() => navigate('/'), 3000);
       }
     };
 
-    fetchUser();
-  }, [navigate, setUser]);
+    handleAuth();
+  }, [location, navigate]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-lg font-semibold">Authenticating...</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-4">
+      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          <Loader2 className="h-12 w-12 text-green-700 animate-spin" />
+          <h1 className="text-2xl font-bold text-gray-900">SSO Authentication</h1>
+          <p className="text-gray-600 text-center">{status}</p>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default SSOCallback;
+export default AuthCallback;
