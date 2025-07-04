@@ -17,23 +17,21 @@ export type AuthState = {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
+  setLoading: (loading: boolean) => void;
 };
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAuthenticated: false,
-      isLoading: false,
+      isLoading: true,
       error: null,
 
-      login: async (email: string, password: string) => {
+      login: async (email, password) => {
         set({ isLoading: true, error: null });
-
         try {
-          // Simulate API delay for demo login
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
+          await new Promise((r) => setTimeout(r, 1000));
           if (email === 'demo@example.com' && password === 'password') {
             set({
               user: {
@@ -50,18 +48,16 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : 'An unknown error occurred',
+            error: error instanceof Error ? error.message : 'Login error',
             isLoading: false,
           });
         }
       },
 
-      register: async (name: string, email: string, password: string) => {
+      register: async (name, email, password) => {
         set({ isLoading: true, error: null });
-
         try {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
+          await new Promise((r) => setTimeout(r, 1000));
           set({
             user: {
               id: '1',
@@ -74,7 +70,7 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : 'An unknown error occurred',
+            error: error instanceof Error ? error.message : 'Register error',
             isLoading: false,
           });
         }
@@ -90,46 +86,51 @@ export const useAuthStore = create<AuthState>()(
           });
       },
 
-      setUser: (user: User) => {
-        console.log('setUser called with:', user);
+      setUser: (user) => {
         set({
           user,
           isAuthenticated: true,
+          isLoading: false,
         });
       },
+
+      setLoading: (isLoading) => set({ isLoading }),
     }),
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
+      version: 1,
     }
   )
 );
 
-// ✅ Optional: Call this at app startup to restore session via cookies
-export const checkAuthStatus = async () => {
+// ✅ Make checkAuthStatus return a Promise
+export const checkAuthStatus = async (): Promise<void> => {
+  const store = useAuthStore.getState();
+  store.setLoading(true);
+
   try {
-    const response = await fetch('/api/auth/status', {
+    const res = await fetch('/api/auth/status', {
       credentials: 'include',
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    console.log('✅ checkAuthStatus ➜', data);
 
-    const data = await response.json();
-    console.log('checkAuthStatus ➜ response:', data);
-
-    if (data.isAuthenticated && data.user) {
+    if (data?.isAuthenticated && data.user) {
       const { id, email, name } = data.user;
-
-      useAuthStore.getState().setUser({
+      store.setUser({
         id,
         email,
         name,
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
       });
     } else {
-      useAuthStore.setState({ user: null, isAuthenticated: false });
+      useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
     }
-  } catch (error) {
-    console.error('Auth status check failed:', error);
+  } catch (err) {
+    console.error('checkAuthStatus failed:', err);
+    useAuthStore.setState({ isLoading: false });
   }
 };
