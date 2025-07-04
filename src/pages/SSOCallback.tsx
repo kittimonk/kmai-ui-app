@@ -10,32 +10,45 @@ const SSOCallback = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch('/protected', { credentials: 'include' });
-        if (!response.ok) throw new Error('Failed to fetch user info');
+        // Replace '/protected' with your actual backend endpoint
+        const response = await fetch('/protected', {
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
 
         const data = await response.json();
 
-        if (data.user) {
+        if (data && data.user) {
+          const { id, email, name } = data.user;
           setUser({
-            id: data.user.id,
-            email: data.user.email,
-            name: data.user.name,
-            // You can generate avatar URL here if you want
+            id,
+            email,
+            name,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
           });
-          toast.success(`Welcome, ${data.user.name}!`);
+          toast.success(`Welcome, ${name}!`);
           navigate('/');
         } else {
-          throw new Error('No user data returned');
+          throw new Error('User data not found in response');
         }
       } catch (error) {
-        toast.error('SSO login failed. Please sign in again.');
+        console.error('SSOCallback error:', error);
+        toast.error('SSO authentication failed');
         navigate('/login');
       }
     };
+
     fetchUser();
   }, [navigate, setUser]);
 
-  return <div>Loading...</div>;
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <p className="text-lg font-semibold">Authenticating...</p>
+    </div>
+  );
 };
 
 export default SSOCallback;
