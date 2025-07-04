@@ -1,5 +1,5 @@
 
-import React, { useEffect } from "react";
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DatabaseInitializer } from "@/components/DatabaseInitializer";
 import { ProtectedRoute, PublicOnlyRoute } from "@/components/auth/ProtectedRoute";
-import { checkAuthStatus } from "@/services/auth";
 import Index from "./pages/Index";
 import Chat from "./pages/Chat";
 import CodeConverter from "./pages/CodeConverter";
