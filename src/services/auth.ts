@@ -114,6 +114,7 @@ export const checkAuthStatus = async () => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
+    console.log('checkAuthStatus ➜ response:', data);
 
     if (data.isAuthenticated && data.user) {
       const { id, email, name } = data.user;
