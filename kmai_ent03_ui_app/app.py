@@ -77,10 +77,6 @@ OIDC_CLIENT_SECRET = vault_service.get_secret("OIDC_CLIENT_SECRET", path)
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
 OIDC_CALLBACK_URL = "https://kma03.dev.com/sso"
 
-search_service = "https://d03-eastus-km-search-893.search.windows.net"
-search_index_name = "gptenterprise031index"
-msi = DefaultAzureCredential()
-
 # OAuth configuration
 oauth = OAuth()
 oauth.register(
