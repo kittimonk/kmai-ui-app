@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '@/services/auth';
+import { useAuthStore, checkAuthStatus } from '@/services/auth';
 import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -10,6 +10,12 @@ interface ProtectedRouteProps {
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
   const location = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      checkAuthStatus();
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (
@@ -29,6 +35,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
 export const PublicOnlyRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      checkAuthStatus();
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (
