@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/authService';
 import { Loader2 } from 'lucide-react';
-import { checkAuthStatus } from '@/services/auth'; // ✅ Import the fix
+import { useAuthStore, checkAuthStatus } from '@/services/auth';
 
 const AuthCallback = () => {
   const [status, setStatus] = useState('Authenticating...');
@@ -26,16 +26,8 @@ const AuthCallback = () => {
         // ✅ Call backend SSO handler (optional for logging)
         await authService.handleCallback();
 
-        // ✅ Fetch user session from backend and update Zustand
-        const res = await fetch('/protected', { credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to fetch user information');
-        const data = await res.json();
-
-        useAuthStore.setState({
-          user: data.user,
-          isAuthenticated: true,
-          isLoading: false,
-        });
+        // ✅ Use the proper checkAuthStatus function to update auth state
+        await checkAuthStatus();
         
         setStatus('Authentication successful! Redirecting...');
         setTimeout(() => navigate('/chat'), 1500);

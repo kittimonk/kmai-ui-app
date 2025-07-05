@@ -26,12 +26,12 @@ const Login = () => {
 
   // Function to redirect to the backend SSO login endpoint
   const handleSSOLogin = () => {
-    window.location.href = "https://kmai93.dev.ice.com/login";
+    window.location.href = "/login";
   };
 
   // Function to redirect to the backend SSO logout endpoint
   const handleSSOLogout = () => {
-    window.location.href = "https://kmai93.dev.ice.com/logout";
+    window.location.href = "/logout";
   };
 
   const form = useForm<FormData>({
