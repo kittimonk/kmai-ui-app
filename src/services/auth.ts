@@ -122,7 +122,7 @@ export const checkAuthStatus = async (): Promise<void> => {
       const { id, email, name } = data.user;
       useAuthStore.setState({
         user: { id, email, name },
-        isAutehticated: true,
+        isAuthenticated: true,
         isLoading: false,
       });
     } else {
