@@ -12,10 +12,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const location = useLocation();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !isLoading) {
       checkAuthStatus();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isLoading]);
 
   if (isLoading) {
     return (
