@@ -120,11 +120,10 @@ export const checkAuthStatus = async (): Promise<void> => {
 
     if (data?.isAuthenticated && data.user) {
       const { id, email, name } = data.user;
-      store.setUser({
-        id,
-        email,
-        name,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+      useAuthStore.setState({
+        user: { id, email, name },
+        isAutehticated: true,
+        isLoading: false,
       });
     } else {
       useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
