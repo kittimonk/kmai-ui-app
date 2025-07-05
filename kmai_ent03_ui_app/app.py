@@ -247,24 +247,25 @@ async def auth_callback(request: Request):
         
         if user_info:
             # Extract user groups from the token
-            groups = user_info.get("CustomMemberOf", [])
+            user_group = user_info.get("DD_memberOf", [])
             
             # Check if user is in allowed groups
-            allowed_groups = ["CN=GPT_Enterprise_Dev,OU=Groups,DC=test,DC=ca"]
+            allowed_group = "TKMAI-KME03-RO"
             
-            if any(group in allowed_groups for group in groups):
+            if user_group == allowed_group:
                 # Store user info in session
                 request.session["user"] = {
                     "id": user_info.get("sub"),
                     "email": user_info.get("email"),
                     "name": user_info.get("name"),
-                    "groups": groups
+                    "group": user_group
                 }
-                return RedirectResponse(url="/sso/callback")
+                return RedirectResponse(url="/") # Redirect to the main UI page
+                #return RedirectResponse(url="/sso/callback")
             else:
                 return JSONResponse(
                     status_code=403,
-                    content={"error": "Access denied: User not in allowed groups"}
+                    content={"error": "Access denied: User not in allowed group"}
                 )
         else:
             return JSONResponse(
