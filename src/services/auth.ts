@@ -110,7 +110,7 @@ export const checkAuthStatus = async (): Promise<void> => {
   store.setLoading(true);
 
   try {
-    const res = await fetch('/api/auth/status', {
+    const res = await fetch('/protected', {
       credentials: 'include',
     });
 
@@ -118,10 +118,14 @@ export const checkAuthStatus = async (): Promise<void> => {
     const data = await res.json();
     console.log('✅ checkAuthStatus ➜', data);
 
-    if (data?.isAuthenticated && data.user) {
-      const { id, email, name } = data.user;
+    if (data?.user) {
+      const { sub, aud, jti } = data.user;
       useAuthStore.setState({
-        user: { id, email, name },
+        user: { 
+          id: sub || aud, 
+          email: sub || 'user@company.com',
+          name: sub || 'SSO User'
+        },
         isAuthenticated: true,
         isLoading: false,
       });
@@ -130,6 +134,6 @@ export const checkAuthStatus = async (): Promise<void> => {
     }
   } catch (err) {
     console.error('checkAuthStatus failed:', err);
-    useAuthStore.setState({ isLoading: false });
+    useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
   }
 };
