@@ -27,8 +27,16 @@ const AuthCallback = () => {
         await authService.handleCallback();
 
         // ✅ Fetch user session from backend and update Zustand
-        await checkAuthStatus();
+        const res = await fetch('/protected', { credentials: 'include' });
+        if (!res.ok) throw new Error('Failed to fetch user information');
+        const data = await res.json();
 
+        useAuthStore.setState({
+          user: data.user,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        
         setStatus('Authentication successful! Redirecting...');
         setTimeout(() => navigate('/chat'), 1500);
       } catch (error) {
