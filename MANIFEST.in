@@ -1,9 +1,0 @@
-
-include requirements.txt
-include test-requirements.txt
-recursive-include kmai_ent03_ui_app/static *
-recursive-include static *
-include setup.py
-include pytest.ini
-include LICENSE
-include README.md
