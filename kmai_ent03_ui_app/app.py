@@ -26,7 +26,18 @@ import sys
 from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
+import redis.asyncio as redis
+import pickle
+import base64
 from kmai_ent03_ui_app.vault import VaultConfig, VaultService
+import logging
+
+# Configure comprehensive logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Add the parent directory to sys.path to make backend importable
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -81,10 +92,107 @@ oauth.register(
     },
 )
 
+# Redis Configuration with Azure Authentication
+redis_host = "d03-eastus2-redisEnterprise-234"
+redis_port = 6380
+redis_ssl = True
+
+# Initialize Redis client with Azure authentication
+redis_client = None
+
+async def get_redis_token():
+    """Get Redis access token using Azure managed identity"""
+    try:
+        token = msi.get_token("https://redis.azure.com/.default")
+        logger.info("✅ Successfully obtained Redis access token")
+        return token.token
+    except Exception as e:
+        logger.error(f"❌ Failed to get Redis token: {e}")
+        raise
+
+async def initialize_redis():
+    """Initialize Redis connection with Azure authentication"""
+    global redis_client
+    try:
+        token = await get_redis_token()
+        redis_client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            ssl=True,
+            ssl_cert_reqs=None,
+            username="default",
+            password=token,
+            decode_responses=True
+        )
+        # Test connection
+        await redis_client.ping()
+        logger.info(f"✅ Successfully connected to Redis at {redis_host}:{redis_port}")
+        return redis_client
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Redis: {e}")
+        logger.warning("⚠️ Falling back to in-memory sessions")
+        return None
+
+# Custom Redis Session Store
+class RedisSessionStore:
+    def __init__(self, redis_client):
+        self.redis_client = redis_client
+        self.prefix = "session:"
+        self.ttl = 14 * 24 * 3600  # 14 days
+
+    async def get_session_data(self, session_id: str):
+        if not self.redis_client:
+            return {}
+        try:
+            key = f"{self.prefix}{session_id}"
+            data = await self.redis_client.get(key)
+            if data:
+                logger.info(f"📖 Retrieved session data for {session_id}")
+                return json.loads(data)
+            logger.info(f"📭 No session data found for {session_id}")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error retrieving session {session_id}: {e}")
+            return {}
+
+    async def set_session_data(self, session_id: str, data: dict):
+        if not self.redis_client:
+            return
+        try:
+            key = f"{self.prefix}{session_id}"
+            await self.redis_client.setex(key, self.ttl, json.dumps(data))
+            logger.info(f"💾 Stored session data for {session_id}")
+        except Exception as e:
+            logger.error(f"❌ Error storing session {session_id}: {e}")
+
+    async def delete_session(self, session_id: str):
+        if not self.redis_client:
+            return
+        try:
+            key = f"{self.prefix}{session_id}"
+            await self.redis_client.delete(key)
+            logger.info(f"🗑️ Deleted session {session_id}")
+        except Exception as e:
+            logger.error(f"❌ Error deleting session {session_id}: {e}")
+
 # Initialize FastAPI app
 app = FastAPI(debug=True)
 
-# Add SessionMiddleware
+# Global session store
+session_store = None
+
+@app.on_event("startup")
+async def startup_event():
+    global session_store, redis_client
+    logger.info("🚀 Starting application...")
+    
+    # Initialize Redis
+    redis_client = await initialize_redis()
+    session_store = RedisSessionStore(redis_client)
+    
+    logger.info("✅ Application startup complete")
+
+# Add SessionMiddleware (will be enhanced with Redis in middleware)
 secure_random_key = secrets.token_hex(32)
 app.add_middleware(
     SessionMiddleware,
@@ -244,42 +352,73 @@ def get_user_id(
 # Authentication endpoints
 @app.get("/login")
 async def login(request: Request):
+    logger.info(f"🔐 Login initiated from IP: {request.client.host}")
     redirect_uri = request.url_for("auth_callback")
+    logger.info(f"🔗 Redirect URI: {redirect_uri}")
     return await oauth.oidc.authorize_redirect(request, redirect_uri)
 
 @app.get("/sso/callback")
 async def auth_callback(request: Request):
+    logger.info(f"🔄 SSO callback received from IP: {request.client.host}")
+    logger.info(f"📋 Callback URL: {request.url}")
+    logger.info(f"📋 Query params: {request.query_params}")
+    
     try:
+        logger.info("🎫 Attempting to authorize access token...")
         token = await oauth.oidc.authorize_access_token(request)
+        logger.info("✅ Access token obtained successfully")
+        logger.info(f"🎫 Token keys: {list(token.keys()) if token else 'None'}")
+        
         user_info = token.get("userinfo")
+        logger.info(f"👤 User info keys: {list(user_info.keys()) if user_info else 'None'}")
         
         if user_info:
+            logger.info(f"👤 User info received: {user_info}")
+            
             # Extract user groups from the token
             user_group = user_info.get("DD_memberOf", [])
+            logger.info(f"👥 User groups: {user_group}")
             
             # Check if user is in allowed groups
             allowed_group = "TKMAI-KME03-RO"
+            logger.info(f"🔐 Checking if user group '{user_group}' matches allowed group '{allowed_group}'")
             
             if user_group == allowed_group:
+                logger.info("✅ User authorized - group membership verified")
+                
                 # Store user info in session
-                request.session["user"] = {
+                session_data = {
                     "id": user_info.get("sub"),
                     "email": user_info.get("email"),
                     "name": user_info.get("name"),
                     "group": user_group
                 }
+                logger.info(f"💾 Storing session data: {session_data}")
+                
+                # Store in Redis if available
+                if session_store and session_store.redis_client:
+                    session_id = request.session.get("_session_id") or str(uuid.uuid4())
+                    await session_store.set_session_data(session_id, {"user": session_data})
+                    request.session["_session_id"] = session_id
+                    logger.info(f"📦 Session stored in Redis with ID: {session_id}")
+                
+                request.session["user"] = session_data
+                logger.info("🎉 Authentication successful - redirecting to frontend")
                 return RedirectResponse(url="/sso/callback") # Redirect to frontend SSO handler
             else:
+                logger.warning(f"❌ Access denied - user group '{user_group}' not in allowed group '{allowed_group}'")
                 return JSONResponse(
                     status_code=403,
                     content={"error": "Access denied: User not in allowed group"}
                 )
         else:
+            logger.error("❌ No user info in token")
             return JSONResponse(
                 status_code=401,
                 content={"error": "Authentication failed"}
             )
     except Exception as e:
+        logger.error(f"💥 Authentication error: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"error": f"Authentication error: {str(e)}"}
@@ -287,13 +426,39 @@ async def auth_callback(request: Request):
 
 @app.get("/logout")
 async def logout(request: Request):
+    logger.info(f"🚪 Logout initiated from IP: {request.client.host}")
+    
+    # Clear Redis session if available
+    if session_store and session_store.redis_client:
+        session_id = request.session.get("_session_id")
+        if session_id:
+            await session_store.delete_session(session_id)
+            logger.info(f"🗑️ Redis session {session_id} cleared")
+    
     request.session.clear()
+    logger.info("✅ Session cleared successfully")
     return RedirectResponse(url="/")
 
 @app.get("/api/auth/status")
 async def auth_status(request: Request):
-    user = request.session.get("user")
+    logger.info(f"🔍 Auth status check from IP: {request.client.host}")
+    
+    # Check Redis session first if available
+    user = None
+    if session_store and session_store.redis_client:
+        session_id = request.session.get("_session_id")
+        if session_id:
+            session_data = await session_store.get_session_data(session_id)
+            user = session_data.get("user")
+            logger.info(f"📦 Retrieved user from Redis: {user is not None}")
+    
+    # Fallback to regular session
+    if not user:
+        user = request.session.get("user")
+        logger.info(f"🍪 Retrieved user from session: {user is not None}")
+    
     if user:
+        logger.info(f"✅ User authenticated: {user.get('email', 'unknown')}")
         return {
             "isAuthenticated": True,
             "user": {
@@ -303,15 +468,33 @@ async def auth_status(request: Request):
             }
         }
     else:
+        logger.info("❌ User not authenticated")
         return {"isAuthenticated": False, "user": None}
 
 # Protected endpoint to get user info
 @app.get("/protected")
 async def protected_route(request: Request):
-    user = request.session.get("user")
+    logger.info(f"🔒 Protected route access from IP: {request.client.host}")
+    
+    # Check Redis session first if available
+    user = None
+    if session_store and session_store.redis_client:
+        session_id = request.session.get("_session_id")
+        if session_id:
+            session_data = await session_store.get_session_data(session_id)
+            user = session_data.get("user")
+            logger.info(f"📦 Retrieved user from Redis for protected route: {user is not None}")
+    
+    # Fallback to regular session
     if not user:
+        user = request.session.get("user")
+        logger.info(f"🍪 Retrieved user from session for protected route: {user is not None}")
+    
+    if not user:
+        logger.warning("❌ Unauthorized access attempt to protected route")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    logger.info(f"✅ Protected route access granted to: {user.get('email', 'unknown')}")
     return {"user": user}
 
 # Health check endpoints
