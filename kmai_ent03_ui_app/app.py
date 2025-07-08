@@ -31,15 +31,7 @@ from kmai_ent03_ui_app.vault import VaultConfig, VaultService
 # Add the parent directory to sys.path to make backend importable
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import our database module
-#from backend.database import (
-    #initialize_chat_history_table, 
-    #initialize_feature_interaction_table,
-    #log_chat_interaction, 
-    #log_feature_interaction,
-    #get_user_chat_history,
-    #get_user_feature_history
-#)
+# Database functions removed - using mock implementations
 
 # Azure Configuration
 subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID", "210da3-aff")
@@ -108,8 +100,15 @@ async def session_middleware(request: Request, call_next):
     # Skip middleware for static files, auth routes, and health checks
     if (request.url.path.startswith("/static") or 
         request.url.path.startswith("/assets") or
-        request.url.path in ["/", "/login", "/logout", "/sso/callback", "/health", "/api/health"] or
+        request.url.path in ["/", "/login", "/logout", "/sso/callback", "/health", "/api/health", "/protected"] or
         request.url.path.startswith("/api/auth") or
+        request.url.path.startswith("/chat") or
+        request.url.path.startswith("/converter") or 
+        request.url.path.startswith("/explainer") or
+        request.url.path.startswith("/remediation") or
+        request.url.path.startswith("/ingestion") or
+        request.url.path.startswith("/knowledge") or
+        request.url.path.startswith("/register") or
         request.url.path.endswith(".js") or
         request.url.path.endswith(".css") or
         request.url.path.endswith(".ico") or
@@ -218,11 +217,20 @@ def optimize_content_for_tokens(content, max_length=10000):
     end = content[-half_max:]
     return f"{beginning}\n\n[...{len(content) - max_length} characters truncated...]\n\n{end}"
 
-# Initialize the database tables
-#@app.on_event("startup")
-#async def startup_db_client():
-    #initialize_chat_history_table()
-    #initialize_feature_interaction_table()
+# Mock database functions
+def log_chat_interaction(**kwargs):
+    print(f"Chat interaction logged: {kwargs}")
+    pass
+
+def log_feature_interaction(**kwargs):
+    print(f"Feature interaction logged: {kwargs}")
+    pass
+
+def get_user_chat_history(user_id):
+    return []
+
+def get_user_feature_history(user_id, feature_type=None):
+    return []
 
 # Function to get user ID from request
 def get_user_id(
@@ -260,8 +268,7 @@ async def auth_callback(request: Request):
                     "name": user_info.get("name"),
                     "group": user_group
                 }
-                return RedirectResponse(url="/") # Redirect to the main UI page
-                #return RedirectResponse(url="/sso/callback")
+                return RedirectResponse(url="/sso/callback") # Redirect to frontend SSO handler
             else:
                 return JSONResponse(
                     status_code=403,
@@ -752,7 +759,8 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 # Static file serving
-app.mount("/static", StaticFiles(directory="dist"), name="static")
+app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
 
 # Catch-all route for frontend
 @app.get("/{full_path:path}")
@@ -760,13 +768,7 @@ async def serve_react_app(full_path: str):
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API endpoint not found")
     
-    # Serve static files
-    if full_path.startswith("assets/") or full_path.endswith(('.js', '.css', '.ico', '.png', '.svg')):
-        file_path = Path("dist") / full_path
-        if file_path.exists():
-            return FileResponse(file_path)
-    
-    # Serve index.html for all other routes (SPA)
+    # For all frontend routes, serve the React app
     return FileResponse("dist/index.html")
 
 if __name__ == "__main__":

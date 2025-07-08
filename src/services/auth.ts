@@ -119,12 +119,12 @@ export const checkAuthStatus = async (): Promise<void> => {
     console.log('✅ checkAuthStatus ➜', data);
 
     if (data?.user) {
-      const { sub, aud, jti } = data.user;
+      const { id, email, name, group } = data.user;
       useAuthStore.setState({
         user: { 
-          id: sub || aud, 
-          email: sub || 'user@company.com',
-          name: sub || 'SSO User'
+          id: id || email, 
+          email: email || 'user@company.com',
+          name: name || email || 'SSO User'
         },
         isAuthenticated: true,
         isLoading: false,

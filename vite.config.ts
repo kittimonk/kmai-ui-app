@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     sourcemap: true,
-    outDir: 'static',
+    outDir: 'dist',
     rollupOptions: {
       external: [
         // Backend files
