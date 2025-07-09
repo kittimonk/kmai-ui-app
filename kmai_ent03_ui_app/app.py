@@ -26,21 +26,10 @@ import sys
 from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
-import redis.asyncio as redis
-import pickle
-import base64
-from kmai_ent03_ui_app.vault import VaultConfig, VaultService
-import logging
-
-# Configure comprehensive logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from vault import VaultConfig, VaultService
 
 # Add the parent directory to sys.path to make backend importable
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Database functions removed - using mock implementations
 
@@ -78,7 +67,7 @@ if current_environment in ["local", "test"]:
 OIDC_CLIENT_ID = vault_service.get_secret("OIDC_CLIENT_ID", path)
 OIDC_CLIENT_SECRET = vault_service.get_secret("OIDC_CLIENT_SECRET", path)
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
-OIDC_CALLBACK_URL = "https://kma03.dev.com/sso"
+OIDC_CALLBACK_URL = "https://kme03.dev.com/sso"
 
 # OAuth configuration
 oauth = OAuth()
@@ -88,117 +77,30 @@ oauth.register(
     client_secret=OIDC_CLIENT_SECRET,
     server_metadata_url=f"{OIDC_AUTHORITY}/.well-known/openid-configuration",
     client_kwargs={
-        "scope": "openid CustomMemberOf",
+        "scope": "openid DD_Custom_memberOf",
     },
 )
-
-# Redis Configuration with Azure Authentication
-redis_host = "d03-eastus2-redisEnterprise-234"
-redis_port = 6380
-redis_ssl = True
-
-# Initialize Redis client with Azure authentication
-redis_client = None
-
-async def get_redis_token():
-    """Get Redis access token using Azure managed identity"""
-    try:
-        token = msi.get_token("https://redis.azure.com/.default")
-        logger.info("✅ Successfully obtained Redis access token")
-        return token.token
-    except Exception as e:
-        logger.error(f"❌ Failed to get Redis token: {e}")
-        raise
-
-async def initialize_redis():
-    """Initialize Redis connection with Azure authentication"""
-    global redis_client
-    try:
-        token = await get_redis_token()
-        redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            ssl=True,
-            ssl_cert_reqs=None,
-            username="default",
-            password=token,
-            decode_responses=True
-        )
-        # Test connection
-        await redis_client.ping()
-        logger.info(f"✅ Successfully connected to Redis at {redis_host}:{redis_port}")
-        return redis_client
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to Redis: {e}")
-        logger.warning("⚠️ Falling back to in-memory sessions")
-        return None
-
-# Custom Redis Session Store
-class RedisSessionStore:
-    def __init__(self, redis_client):
-        self.redis_client = redis_client
-        self.prefix = "session:"
-        self.ttl = 14 * 24 * 3600  # 14 days
-
-    async def get_session_data(self, session_id: str):
-        if not self.redis_client:
-            return {}
-        try:
-            key = f"{self.prefix}{session_id}"
-            data = await self.redis_client.get(key)
-            if data:
-                logger.info(f"📖 Retrieved session data for {session_id}")
-                return json.loads(data)
-            logger.info(f"📭 No session data found for {session_id}")
-            return {}
-        except Exception as e:
-            logger.error(f"❌ Error retrieving session {session_id}: {e}")
-            return {}
-
-    async def set_session_data(self, session_id: str, data: dict):
-        if not self.redis_client:
-            return
-        try:
-            key = f"{self.prefix}{session_id}"
-            await self.redis_client.setex(key, self.ttl, json.dumps(data))
-            logger.info(f"💾 Stored session data for {session_id}")
-        except Exception as e:
-            logger.error(f"❌ Error storing session {session_id}: {e}")
-
-    async def delete_session(self, session_id: str):
-        if not self.redis_client:
-            return
-        try:
-            key = f"{self.prefix}{session_id}"
-            await self.redis_client.delete(key)
-            logger.info(f"🗑️ Deleted session {session_id}")
-        except Exception as e:
-            logger.error(f"❌ Error deleting session {session_id}: {e}")
 
 # Initialize FastAPI app
 app = FastAPI(debug=True)
 
-# Global session store
-session_store = None
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
 
-@app.on_event("startup")
-async def startup_event():
-    global session_store, redis_client
-    logger.info("🚀 Starting application...")
-    
-    # Initialize Redis
-    redis_client = await initialize_redis()
-    session_store = RedisSessionStore(redis_client)
-    
-    logger.info("✅ Application startup complete")
-
-# Add SessionMiddleware (will be enhanced with Redis in middleware)
+# Add SessionMiddleware
 secure_random_key = secrets.token_hex(32)
 app.add_middleware(
     SessionMiddleware,
     secret_key=secure_random_key,
     max_age=14 * 24 * 3600,
-    https_only=False,
+    https_only="True",
     same_site="lax"
 )
 
@@ -208,7 +110,7 @@ async def session_middleware(request: Request, call_next):
     # Skip middleware for static files, auth routes, and health checks
     if (request.url.path.startswith("/static") or 
         request.url.path.startswith("/assets") or
-        request.url.path in ["/", "/login", "/logout", "/sso/callback", "/health", "/api/health", "/protected"] or
+        request.url.path in ["/", "/login", "/logout", "/sso", "/health", "/api/health", "/protected"] or
         request.url.path.startswith("/api/auth") or
         request.url.path.startswith("/chat") or
         request.url.path.startswith("/converter") or 
@@ -236,16 +138,6 @@ async def session_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
-
 # Function to get token for OpenAI
 def get_bearer_token_provider(credential, scope):
     def get_token():
@@ -267,12 +159,92 @@ search_client = SearchClient(
     credential=msi,
 )
 
+# Function to get user ID from request
+# def get_user_id(
+#     x_user_id: Optional[str] = Header(None),
+#     x_session_id: Optional[str] = Header(None)
+# ):
+ #    user_id = x_user_id or "anonymous"
+ #    session_id = x_session_id or str(uuid.uuid4())
+ #    return {"user_id": user_id, "session_id": session_id}
+
+# Authentication endpoints
+@app.get("/login")
+async def login(request: Request):
+    redirect_uri = request.url_for("auth_callback")
+    return await oauth.oidc.authorize_redirect(request, redirect_uri)
+
+@app.get("/sso")
+async def auth_callback(request: Request):
+    try:
+        token = await oauth.oidc.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        
+        if user_info:
+            # Extract user groups from the token
+            user_group = user_info.get("DD_Custom_memberOf", [])
+            
+            # Check if user is in allowed groups
+            allowed_group = "TKMAI_KME03_RO"
+            
+            if user_group == allowed_group:
+                # Store user info in session
+                request.session["user"] = {
+                    "id": user_info.get("sub"),
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                    "group": user_group
+                }
+                return RedirectResponse(url="/") # Redirect to frontend SSO handler
+            else:
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "Access denied: User not in allowed group"}
+                )
+        else:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication failed"}
+            )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Authentication error: {str(e)}"}
+        )
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    user = request.session.get("user")
+    if user:
+        return {
+            "isAuthenticated": True,
+            "user": {
+                "id": user.get("id"),
+                "email": user.get("email"),
+                "name": user.get("name")
+            }
+        }
+    else:
+        return {"isAuthenticated": False, "user": None}
+
+# Protected endpoint to get user info
+@app.get("/protected")
+async def protected_route(request: Request):
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    return {"user": user}
+
 # Request Models
 class ChatRequest(BaseModel):
     message: str
     max_tokens: int = 10000
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
 
 class CodeExplainRequest(BaseModel):
     code: str
@@ -325,214 +297,6 @@ def optimize_content_for_tokens(content, max_length=10000):
     end = content[-half_max:]
     return f"{beginning}\n\n[...{len(content) - max_length} characters truncated...]\n\n{end}"
 
-# Mock database functions
-def log_chat_interaction(**kwargs):
-    print(f"Chat interaction logged: {kwargs}")
-    pass
-
-def log_feature_interaction(**kwargs):
-    print(f"Feature interaction logged: {kwargs}")
-    pass
-
-def get_user_chat_history(user_id):
-    return []
-
-def get_user_feature_history(user_id, feature_type=None):
-    return []
-
-# Function to get user ID from request
-def get_user_id(
-    x_user_id: Optional[str] = Header(None),
-    x_session_id: Optional[str] = Header(None)
-):
-    user_id = x_user_id or "anonymous"
-    session_id = x_session_id or str(uuid.uuid4())
-    return {"user_id": user_id, "session_id": session_id}
-
-# Authentication endpoints
-@app.get("/login")
-async def login(request: Request):
-    logger.info(f"🔐 Login initiated from IP: {request.client.host}")
-    redirect_uri = request.url_for("auth_callback")
-    logger.info(f"🔗 Redirect URI: {redirect_uri}")
-    return await oauth.oidc.authorize_redirect(request, redirect_uri)
-
-@app.get("/sso/callback")
-async def auth_callback(request: Request):
-    logger.info(f"🔄 SSO callback received from IP: {request.client.host}")
-    logger.info(f"📋 Callback URL: {request.url}")
-    logger.info(f"📋 Query params: {request.query_params}")
-    
-    try:
-        logger.info("🎫 Attempting to authorize access token...")
-        token = await oauth.oidc.authorize_access_token(request)
-        logger.info("✅ Access token obtained successfully")
-        logger.info(f"🎫 Token keys: {list(token.keys()) if token else 'None'}")
-        
-        user_info = token.get("userinfo")
-        logger.info(f"👤 User info keys: {list(user_info.keys()) if user_info else 'None'}")
-        
-        if user_info:
-            logger.info(f"👤 User info received: {user_info}")
-            
-            # Extract user groups from the token
-            user_group = user_info.get("DD_memberOf", [])
-            logger.info(f"👥 User groups: {user_group}")
-            
-            # Check if user is in allowed groups
-            allowed_group = "TKMAI-KME03-RO"
-            logger.info(f"🔐 Checking if user group '{user_group}' matches allowed group '{allowed_group}'")
-            
-            if user_group == allowed_group:
-                logger.info("✅ User authorized - group membership verified")
-                
-                # Store user info in session
-                session_data = {
-                    "id": user_info.get("sub"),
-                    "email": user_info.get("email"),
-                    "name": user_info.get("name"),
-                    "group": user_group
-                }
-                logger.info(f"💾 Storing session data: {session_data}")
-                
-                # Store in Redis if available
-                if session_store and session_store.redis_client:
-                    session_id = request.session.get("_session_id") or str(uuid.uuid4())
-                    await session_store.set_session_data(session_id, {"user": session_data})
-                    request.session["_session_id"] = session_id
-                    logger.info(f"📦 Session stored in Redis with ID: {session_id}")
-                
-                request.session["user"] = session_data
-                logger.info("🎉 Authentication successful - redirecting to frontend")
-                return RedirectResponse(url="/sso/callback") # Redirect to frontend SSO handler
-            else:
-                logger.warning(f"❌ Access denied - user group '{user_group}' not in allowed group '{allowed_group}'")
-                return JSONResponse(
-                    status_code=403,
-                    content={"error": "Access denied: User not in allowed group"}
-                )
-        else:
-            logger.error("❌ No user info in token")
-            return JSONResponse(
-                status_code=401,
-                content={"error": "Authentication failed"}
-            )
-    except Exception as e:
-        logger.error(f"💥 Authentication error: {str(e)}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={"error": f"Authentication error: {str(e)}"}
-        )
-
-@app.get("/logout")
-async def logout(request: Request):
-    logger.info(f"🚪 Logout initiated from IP: {request.client.host}")
-    
-    # Clear Redis session if available
-    if session_store and session_store.redis_client:
-        session_id = request.session.get("_session_id")
-        if session_id:
-            await session_store.delete_session(session_id)
-            logger.info(f"🗑️ Redis session {session_id} cleared")
-    
-    request.session.clear()
-    logger.info("✅ Session cleared successfully")
-    return RedirectResponse(url="/")
-
-@app.get("/api/auth/status")
-async def auth_status(request: Request):
-    logger.info(f"🔍 Auth status check from IP: {request.client.host}")
-    
-    # Check Redis session first if available
-    user = None
-    if session_store and session_store.redis_client:
-        session_id = request.session.get("_session_id")
-        if session_id:
-            session_data = await session_store.get_session_data(session_id)
-            user = session_data.get("user")
-            logger.info(f"📦 Retrieved user from Redis: {user is not None}")
-    
-    # Fallback to regular session
-    if not user:
-        user = request.session.get("user")
-        logger.info(f"🍪 Retrieved user from session: {user is not None}")
-    
-    if user:
-        logger.info(f"✅ User authenticated: {user.get('email', 'unknown')}")
-        return {
-            "isAuthenticated": True,
-            "user": {
-                "id": user.get("id"),
-                "email": user.get("email"),
-                "name": user.get("name")
-            }
-        }
-    else:
-        logger.info("❌ User not authenticated")
-        return {"isAuthenticated": False, "user": None}
-
-# Protected endpoint to get user info
-@app.get("/protected")
-async def protected_route(request: Request):
-    logger.info(f"🔒 Protected route access from IP: {request.client.host}")
-    
-    # Check Redis session first if available
-    user = None
-    if session_store and session_store.redis_client:
-        session_id = request.session.get("_session_id")
-        if session_id:
-            session_data = await session_store.get_session_data(session_id)
-            user = session_data.get("user")
-            logger.info(f"📦 Retrieved user from Redis for protected route: {user is not None}")
-    
-    # Fallback to regular session
-    if not user:
-        user = request.session.get("user")
-        logger.info(f"🍪 Retrieved user from session for protected route: {user is not None}")
-    
-    if not user:
-        logger.warning("❌ Unauthorized access attempt to protected route")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    logger.info(f"✅ Protected route access granted to: {user.get('email', 'unknown')}")
-    return {"user": user}
-
-# Health check endpoints
-@app.get("/health")
-def health():
-    return {"status": "healthy", "service": "kmai-app"}
-
-@app.get("/api/health")
-def api_health():
-    return {"status": "ok", "message": "API server is running"}
-
-# Options route for CORS
-@app.options("/api/{rest_of_path:path}")
-async def options_route(rest_of_path: str):
-    return {}
-
-# History endpoints
-@app.get("/api/chat/history")
-async def get_chat_history(user_info: dict = Depends(get_user_id)):
-    user_id = user_info.get("user_id")
-    if user_id == "anonymous":
-        return JSONResponse(content={"error": "User ID required"}, status_code=400)
-    
-    history = get_user_chat_history(user_id)
-    return {"history": history}
-
-@app.get("/api/feature/history")
-async def get_feature_history(
-    feature_type: Optional[str] = None, 
-    user_info: dict = Depends(get_user_id)
-):
-    user_id = user_info.get("user_id")
-    if user_id == "anonymous":
-        return JSONResponse(content={"error": "User ID required"}, status_code=400)
-    
-    history = get_user_feature_history(user_id, feature_type)
-    return {"history": history}
-
 # Chat endpoints
 @app.post("/chat/context")
 async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_id)):
@@ -562,18 +326,6 @@ async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_
         ai_response = response.choices[0].message.content.strip()
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
-        
-        log_chat_interaction(
-            user_id=user_id,
-            user_message=user_prompt,
-            ai_response=ai_response,
-            endpoint_used="/chat/context",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id,
-            metadata={"matched_docs": len(matched_docs)}
-        )
-        
         reply = {
             "answer": ai_response,
             "citations": matched_docs
@@ -581,18 +333,9 @@ async def chat_context(request: ChatRequest, user_info: dict = Depends(get_user_
         return reply
     except Exception as e:
         print(f"Error in chat_context: {str(e)}")
-        log_chat_interaction(
-            user_id=user_id,
-            user_message=user_prompt,
-            ai_response=f"Error: {str(e)}",
-            endpoint_used="/chat/context",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-@app.post("/api/chat")
+@app.post("/chat")
 async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     user_prompt = request.message
     user_id = request.user_id or user_info.get("user_id")
@@ -613,32 +356,13 @@ async def chat_api(request: ChatRequest, user_info: dict = Depends(get_user_id))
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        log_chat_interaction(
-            user_id=user_id,
-            user_message=user_prompt,
-            ai_response=ai_response,
-            endpoint_used="/api/chat",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id
-        )
-        
         return {"response": ai_response}
     except Exception as e:
         print(f"Error in chat_api: {str(e)}")
-        log_chat_interaction(
-            user_id=user_id,
-            user_message=user_prompt,
-            ai_response=f"Error: {str(e)}",
-            endpoint_used="/api/chat",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Code converter endpoint
-@app.post("/converter/")
+@app.post("/converter")
 async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)):
     print("Converter request message:", request.message)
     user_id = request.user_id or user_info.get("user_id")
@@ -663,34 +387,13 @@ async def converter(request: ChatRequest, user_info: dict = Depends(get_user_id)
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="code_converter",
-            input_data=request.message,
-            output_data=output_response,
-            endpoint_used="/converter",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id
-        )
-        
         return {"response": output_response}
     except Exception as e:
         print(f"Error in code converter: {str(e)}")
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="code_converter",
-            input_data=request.message,
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/converter",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Code explainer endpoint
-@app.post("/code-explainer/")
+@app.post("/code-explainer")
 async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(get_user_id)):
     print("Received code explain request for action:", request.action)
     
@@ -733,35 +436,13 @@ async def code_explainer(request: CodeExplainRequest, user_info: dict = Depends(
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="code_explainer",
-            input_data=request.code,
-            output_data=output_response,
-            endpoint_used="/code-explainer",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id,
-            metadata={"action": request.action}
-        )
-        
         return {"response": output_response}
     except Exception as e:
         print(f"Error in code explainer: {str(e)}")
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="code_explainer",
-            input_data=request.code,
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/code-explainer",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"action": request.action, "error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Remediation endpoints
-@app.post("/remediation/validate/")
+@app.post("/remediation/validate")
 async def remediation_validate(request: RemediationRequest, user_info: dict = Depends(get_user_id)):
     user_id = request.user_id or user_info.get("user_id")
     session_id = request.session_id or user_info.get("session_id")
@@ -795,30 +476,9 @@ async def remediation_validate(request: RemediationRequest, user_info: dict = De
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_validate",
-            input_data=request.code,
-            output_data=analysis_result,
-            endpoint_used="/remediation/validate",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id
-        )
-        
         return {"analysis": analysis_result}
     except Exception as e:
         print(f"Error in remediation validate: {str(e)}")
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_validate",
-            input_data=request.code,
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/remediation/validate",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 @app.post("/remediation/rewrite/")
@@ -856,30 +516,9 @@ async def remediation_rewrite(request: RemediationRequest, user_info: dict = Dep
         processing_time = time.time() - start_time
         tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
         
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_rewrite",
-            input_data=request.code,
-            output_data=rewritten_code,
-            endpoint_used="/remediation/rewrite",
-            processing_time=processing_time,
-            tokens_used=tokens_used,
-            session_id=session_id
-        )
-        
         return {"rewritten_code": rewritten_code}
     except Exception as e:
         print(f"Error in remediation rewrite: {str(e)}")
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="remediation_rewrite",
-            input_data=request.code,
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/remediation/rewrite",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Document ingestion endpoint
@@ -906,21 +545,6 @@ async def upload_file(
         
         processing_time = time.time() - start_time
         
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="document_ingestion",
-            input_data=f"File: {file.filename}, Size: {file_size} bytes",
-            output_data=f"Successfully processed {len(content)} characters",
-            endpoint_used="/ingestion/upload",
-            processing_time=processing_time,
-            session_id=session_id,
-            metadata={
-                "filename": file.filename,
-                "file_size": file_size,
-                "content_length": len(content)
-            }
-        )
-        
         return {
             "message": "File uploaded and processed successfully",
             "filename": file.filename,
@@ -929,16 +553,6 @@ async def upload_file(
         }
     except Exception as e:
         print(f"Error in file upload: {str(e)}")
-        log_feature_interaction(
-            user_id=user_id,
-            feature_type="document_ingestion",
-            input_data=f"File: {file.filename if file else 'Unknown'}",
-            output_data=f"Error: {str(e)}",
-            endpoint_used="/ingestion/upload",
-            processing_time=time.time() - start_time,
-            session_id=session_id,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 # Static file serving
