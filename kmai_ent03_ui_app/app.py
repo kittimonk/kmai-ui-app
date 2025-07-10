@@ -94,6 +94,15 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# Custom domain middleware
+@app.middleware("http")
+async def enforce_custom_domain(request: Request, call_next):
+    custom_domain = "kme03.dev.td.com"
+    if not request.url.hostname.endswith(custom_domain):
+        url = str(request.url).replace(request.url.hostname, custom_domain)
+        return RedirectResponse(url=url, status_code=301)
+    return await call_next(request)
+
 # Add SessionMiddleware
 secure_random_key = secrets.token_hex(32)
 print(f"Starting app with session secret key length: {len(secure_random_key)}")
