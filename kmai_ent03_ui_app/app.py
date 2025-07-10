@@ -96,44 +96,50 @@ app.add_middleware(
 
 # Add SessionMiddleware
 secure_random_key = secrets.token_hex(32)
+print(f"Starting app with session secret key length: {len(secure_random_key)}")
 app.add_middleware(
     SessionMiddleware,
     secret_key=secure_random_key,
     max_age=14 * 24 * 3600,
-    https_only="True",
+    https_only=False,  # Set to False for development/http, True for production/https
     same_site="lax"
 )
 
-# Session middleware to check authentication
+# Session middleware to check authentication for API endpoints only
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
-    # Skip middleware for static files, auth routes, and health checks
+    # Allow all static files and UI routes to pass through
     if (request.url.path.startswith("/static") or 
         request.url.path.startswith("/assets") or
+        request.url.path.startswith("/dist") or
         request.url.path in ["/", "/login", "/logout", "/sso", "/health", "/api/health", "/protected"] or
         request.url.path.startswith("/api/auth") or
-        request.url.path.startswith("/chat") or
-        request.url.path.startswith("/converter") or 
-        request.url.path.startswith("/explainer") or
-        request.url.path.startswith("/remediation") or
-        request.url.path.startswith("/ingestion") or
-        request.url.path.startswith("/knowledge") or
-        request.url.path.startswith("/register") or
+        request.url.path.startswith("/sso") or
         request.url.path.endswith(".js") or
         request.url.path.endswith(".css") or
         request.url.path.endswith(".ico") or
         request.url.path.endswith(".png") or
-        request.url.path.endswith(".svg")):
+        request.url.path.endswith(".svg") or
+        request.url.path.endswith(".html") or
+        request.url.path.startswith("/docs") or
+        request.url.path.startswith("/openapi")):
         response = await call_next(request)
         return response
     
-    # Check if user is authenticated for protected routes
-    user = request.session.get("user")
-    if not user and not request.url.path.startswith("/docs") and not request.url.path.startswith("/openapi"):
-        return JSONResponse(
-            status_code=401,
-            content={"error": "Authentication required"}
-        )
+    # Only check authentication for API endpoints (chat, converter, etc.)
+    if (request.url.path.startswith("/chat") or
+        request.url.path.startswith("/converter") or 
+        request.url.path.startswith("/explainer") or
+        request.url.path.startswith("/remediation") or
+        request.url.path.startswith("/ingestion") or
+        request.url.path.startswith("/knowledge")):
+        
+        user = request.session.get("user")
+        if not user:
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Authentication required"}
+            )
     
     response = await call_next(request)
     return response
@@ -160,53 +166,86 @@ search_client = SearchClient(
 )
 
 # Function to get user ID from request
-# def get_user_id(
-#     x_user_id: Optional[str] = Header(None),
-#     x_session_id: Optional[str] = Header(None)
-# ):
- #    user_id = x_user_id or "anonymous"
- #    session_id = x_session_id or str(uuid.uuid4())
- #    return {"user_id": user_id, "session_id": session_id}
+def get_user_id(
+    x_user_id: Optional[str] = Header(None),
+    x_session_id: Optional[str] = Header(None)
+):
+    user_id = x_user_id or "anonymous"
+    session_id = x_session_id or str(uuid.uuid4())
+    return {"user_id": user_id, "session_id": session_id}
 
 # Authentication endpoints
 @app.get("/login")
 async def login(request: Request):
-    redirect_uri = request.url_for("auth_callback")
-    return await oauth.oidc.authorize_redirect(request, redirect_uri)
+    # Generate a secure state parameter for CSRF protection
+    state = secrets.token_urlsafe(32)
+    request.session["oauth_state"] = state
+    
+    redirect_uri = OIDC_CALLBACK_URL  # Use the configured callback URL
+    return await oauth.oidc.authorize_redirect(request, redirect_uri, state=state)
 
 @app.get("/sso")
 async def auth_callback(request: Request):
     try:
+        # Verify state parameter for CSRF protection
+        received_state = request.query_params.get("state")
+        stored_state = request.session.get("oauth_state")
+        
+        if not received_state or received_state != stored_state:
+            print(f"State mismatch: received={received_state}, stored={stored_state}")
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid state parameter - CSRF protection"}
+            )
+        
+        # Clear the state from session
+        request.session.pop("oauth_state", None)
+        
+        # Exchange code for token
         token = await oauth.oidc.authorize_access_token(request)
         user_info = token.get("userinfo")
         
+        print(f"Token received: {token}")
+        print(f"User info: {user_info}")
+        
         if user_info:
             # Extract user groups from the token
-            user_group = user_info.get("DD_Custom_memberOf", [])
+            user_groups = user_info.get("DD_Custom_memberOf", [])
             
             # Check if user is in allowed groups
-            allowed_group = "TKMAI_KME03_RO"
+            allowed_group = "TKMAI_ENT03_RO"
             
-            if user_group == allowed_group:
+            # Handle both string and list formats
+            if isinstance(user_groups, str):
+                user_groups = [user_groups]
+            
+            print(f"User groups: {user_groups}, Allowed: {allowed_group}")
+            
+            if allowed_group in user_groups:
                 # Store user info in session
                 request.session["user"] = {
                     "id": user_info.get("sub"),
-                    "email": user_info.get("email"),
-                    "name": user_info.get("name"),
-                    "group": user_group
+                    "email": user_info.get("email", user_info.get("preferred_username", "unknown")),
+                    "name": user_info.get("name", user_info.get("preferred_username", "User")),
+                    "groups": user_groups
                 }
-                return RedirectResponse(url="/") # Redirect to frontend SSO handler
+                print(f"User authenticated successfully: {request.session['user']}")
+                # Redirect to frontend SSO callback handler
+                return RedirectResponse(url="/sso/callback")
             else:
+                print(f"Access denied: User groups {user_groups} not in allowed group {allowed_group}")
                 return JSONResponse(
                     status_code=403,
-                    content={"error": "Access denied: User not in allowed group"}
+                    content={"error": f"Access denied: User not in required group {allowed_group}"}
                 )
         else:
+            print("No user info in token")
             return JSONResponse(
                 status_code=401,
-                content={"error": "Authentication failed"}
+                content={"error": "Authentication failed - no user info"}
             )
     except Exception as e:
+        print(f"Authentication error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"error": f"Authentication error: {str(e)}"}
