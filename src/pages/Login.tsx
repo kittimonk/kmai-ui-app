@@ -99,7 +99,7 @@ const Login = () => {
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <Button 
-            className="w-full" 
+            className="w-full bg-green-600 text-white hover:bg-green-700" 
             onClick={form.handleSubmit(onSubmit)}
             disabled={isLoading}
           >
@@ -114,13 +114,13 @@ const Login = () => {
           </Button>
           <Button
             onClick={handleSSOLogin}
-            className="w-full bg-primary text-white hover:bg-primary-dark"
+            className="w-full bg-green-600 text-white hover:bg-green-700"
           >
             Login with SSO
           </Button>
           <Button
             onClick={handleSSOLogout}
-            className="w-full bg-secondary text-white hover:bg-secondary-dark"
+            className="w-full bg-green-600 text-white hover:bg-green-700"
           >
             Logout
           </Button>
