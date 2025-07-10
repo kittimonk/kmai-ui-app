@@ -8,7 +8,7 @@ const LOCAL_API_URL = 'http://localhost:8000';
 const AZURE_API_URL = ''; #No /api prefix
 
 // Determine if running on Azure Web App
-const isAzureEnvironment = window.location.hostname.includes('azurewebsites.net')  || window.location.hostname === "kme03.dev.com";
+const isAzureEnvironment = window.location.hostname.includes('azurewebsites.net');
 
 // For Lovable preview environment
 const isLovableEnvironment = window.location.hostname.includes('lovableproject.com') || window.location.hostname.includes('lovable.app');
