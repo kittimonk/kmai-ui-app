@@ -94,26 +94,6 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Custom domain middleware
-@app.middleware("http")
-async def enforce_custom_domain(request: Request, call_next):
-    custom_domain = "kme03.dev.td.com"
-    if not request.url.hostname.endswith(custom_domain):
-        url = str(request.url).replace(request.url.hostname, custom_domain)
-        return RedirectResponse(url=url, status_code=301)
-    return await call_next(request)
-
-# Add SessionMiddleware
-secure_random_key = secrets.token_hex(32)
-print(f"Starting app with session secret key length: {len(secure_random_key)}")
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=secure_random_key,
-    max_age=14 * 24 * 3600,
-    https_only=False,  # Set to False for development/http, True for production/https
-    same_site="lax"
-)
-
 # Session middleware to check authentication for API endpoints only
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
@@ -152,6 +132,17 @@ async def session_middleware(request: Request, call_next):
     
     response = await call_next(request)
     return response
+
+# Add SessionMiddleware
+secure_random_key = secrets.token_hex(32)
+print(f"Starting app with session secret key length: {len(secure_random_key)}")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=secure_random_key,
+    max_age=14 * 24 * 3600,
+    https_only=False,  # Set to False for development/http, True for production/https
+    same_site="lax"
+)
 
 # Function to get token for OpenAI
 def get_bearer_token_provider(credential, scope):
