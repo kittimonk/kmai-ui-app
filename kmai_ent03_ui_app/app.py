@@ -1,6 +1,6 @@
 import asyncio
 import os, subprocess, time
-from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential, DefaultAzureCredential, get_bearer_token_provider
 from azure.storage.blob import BlobServiceClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from azure.search.documents.indexes.models import SimpleField
@@ -94,6 +94,20 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+# Initialize OpenAI client with token provider
+client = AzureOpenAI(
+    azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
+    api_version=openai_api_version,
+    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
+)
+
+# Initialize search client
+search_client = SearchClient(
+    endpoint=search_service,
+    index_name=search_index_name,
+    credential=msi,
+)
+
 # Session middleware to check authentication for API endpoints only
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
@@ -150,20 +164,6 @@ def get_bearer_token_provider(credential, scope):
         token = credential.get_token(scope)
         return token.token
     return get_token
-
-# Initialize OpenAI client with token provider
-client = AzureOpenAI(
-    azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
-    api_version=openai_api_version,
-    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
-)
-
-# Initialize search client
-search_client = SearchClient(
-    endpoint=search_service,
-    index_name=search_index_name,
-    credential=msi,
-)
 
 # Function to get user ID from request
 def get_user_id(
