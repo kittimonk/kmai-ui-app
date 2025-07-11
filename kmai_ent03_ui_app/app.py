@@ -108,7 +108,7 @@ app.add_middleware(
 )
 
 # Initialize OpenAI client with token provider
-client = openai.AynscAzureOpenAI(
+client = openai.AsyncAzureOpenAI(
     azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
     api_version=openai_api_version,
     azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
@@ -220,7 +220,7 @@ async def auth_callback(request: Request):
         token = await oauth.oidc.authorize_access_token(request)
         user_info = token.get("userinfo")
         logger.debug(f"Token received value is: {token}")
-        logger.debug(f"User inforamtion accessing is: {user_info}")
+        logger.debug(f"User information accessing is: {user_info}")
         
         print(f"Token received: {token}")
         print(f"User info: {user_info}")
@@ -248,7 +248,7 @@ async def auth_callback(request: Request):
                     "name": user_info.get("name", user_info.get("preferred_username", "User")),
                     "groups": user_groups
                 }
-                logger.debug(f"User has been autheticated successfully: {request.session['user']}")
+                logger.debug(f"User has been authenticated successfully: {request.session['user']}")
                 print(f"User authenticated successfully: {request.session['user']}")
                 # Redirect to frontend SSO callback handler
                 return RedirectResponse(url="/sso/callback")
