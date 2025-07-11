@@ -5,7 +5,7 @@
 const LOCAL_API_URL = 'http://localhost:8000';
 
 // For Azure Web App environment
-const AZURE_API_URL = ''; #No /api prefix
+const AZURE_API_URL = ''; // No /api prefix
 
 // Determine if running on Azure Web App
 const isAzureEnvironment = window.location.hostname.includes('azurewebsites.net');

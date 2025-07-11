@@ -80,7 +80,13 @@ if current_environment in ["local", "test"]:
 OIDC_CLIENT_ID = "20e08190-785c841eb1c9"
 OIDC_CLIENT_SECRET = "e3qqGuCFd1HDjwHC4TiYhHt"
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
-OIDC_CALLBACK_URL = "https://kme03.dev.com/sso"
+
+# Dynamically set callback URL based on the request host
+def get_callback_url(request: Request) -> str:
+    """Generate callback URL based on request host"""
+    host = request.headers.get("host", "localhost:8000")
+    scheme = "https" if "azurewebsites.net" in host or "kme03.dev.com" in host else "http"
+    return f"{scheme}://{host}/sso"
 
 # OAuth configuration
 oauth = OAuth()
@@ -194,7 +200,11 @@ async def login(request: Request):
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
     
-    redirect_uri = OIDC_CALLBACK_URL  # Use the configured callback URL
+    # Dynamically generate callback URL based on current request
+    redirect_uri = get_callback_url(request)
+    logger.debug(f"Login redirect URI: {redirect_uri}")
+    print(f"Login redirect URI: {redirect_uri}")
+    
     return await oauth.oidc.authorize_redirect(request, redirect_uri, state=state)
 
 @app.get("/sso")
@@ -618,9 +628,43 @@ async def upload_file(
 
 static_path = os.path.join(os.path.dirname(__file__), "dist")
 
-# Mount the static files if the directory exists
+# Serve static files and handle SPA routing
+@app.get("/{full_path:path}")
+async def serve_static_files(request: Request, full_path: str):
+    """Serve static files and handle SPA routing"""
+    # Skip for API routes and auth routes that are already handled
+    if (full_path.startswith("api/") or 
+        full_path.startswith("chat") or 
+        full_path.startswith("login") or 
+        full_path.startswith("logout") or 
+        full_path.startswith("sso") or 
+        full_path.startswith("protected") or
+        full_path.startswith("converter") or
+        full_path.startswith("explainer") or
+        full_path.startswith("remediation") or
+        full_path.startswith("ingestion") or
+        full_path.startswith("knowledge") or
+        full_path.startswith("health") or
+        full_path.startswith("docs") or
+        full_path.startswith("openapi")):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Try to serve the requested file
+    file_path = os.path.join(static_path, full_path)
+    
+    # If it's a directory or doesn't exist, serve index.html for SPA routing
+    if not os.path.exists(file_path) or os.path.isdir(file_path):
+        index_path = os.path.join(static_path, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        else:
+            raise HTTPException(status_code=404, detail="Static files not found")
+    
+    return FileResponse(file_path)
+
+# Alternative: Mount static files if the directory exists
 if os.path.exists(static_path):
-    app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 if __name__ == "__main__":
     import uvicorn
