@@ -139,8 +139,9 @@ async def session_middleware(request: Request, call_next):
     if (request.url.path.startswith("/static") or 
         request.url.path.startswith("/assets") or
         request.url.path.startswith("/dist") or
-        request.url.path in ["/", "/login", "/logout", "/sso", "/health", "/api/health", "/protected"] or
+        request.url.path in ["/", "/logout", "/sso", "/health", "/api/health", "/protected"] or
         request.url.path.startswith("/api/auth") or
+        request.url.path.startswith("/auth/") or
         request.url.path.startswith("/sso") or
         request.url.path.endswith(".js") or
         request.url.path.endswith(".css") or
@@ -199,16 +200,16 @@ def get_user_id(
     return {"user_id": user_id, "session_id": session_id}
 
 # Authentication endpoints
-@app.get("/login")
-async def login(request: Request):
+@app.get("/auth/sso")
+async def sso_login(request: Request):
     # Generate a secure state parameter for CSRF protection
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
     
     # Dynamically generate callback URL based on current request
     redirect_uri = get_callback_url(request)
-    logger.debug(f"Login redirect URI: {redirect_uri}")
-    print(f"Login redirect URI: {redirect_uri}")
+    logger.debug(f"SSO Login redirect URI: {redirect_uri}")
+    print(f"SSO Login redirect URI: {redirect_uri}")
     
     return await oauth.oidc.authorize_redirect(request, redirect_uri, state=state)
 
@@ -640,7 +641,7 @@ async def serve_static_files(request: Request, full_path: str):
     # Skip for API routes and auth routes that are already handled
     if (full_path.startswith("api/") or 
         full_path.startswith("chat") or 
-        full_path.startswith("login") or 
+        full_path.startswith("auth/") or 
         full_path.startswith("logout") or 
         full_path.startswith("sso") or 
         full_path.startswith("protected") or

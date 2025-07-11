@@ -26,7 +26,7 @@ const Login = () => {
 
   // Function to redirect to the backend SSO login endpoint
   const handleSSOLogin = () => {
-    window.location.href = "/login";
+    window.location.href = "/auth/sso";
   };
 
   // Function to redirect to the backend SSO logout endpoint

@@ -10,6 +10,7 @@ const Home = () => {
   const { user, isAuthenticated, logout } = useAuthStore();
 
   const handleLogin = () => {
+    // Navigate to login page to show SSO options
     window.location.href = '/login';
   };
 
