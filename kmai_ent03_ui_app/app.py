@@ -27,6 +27,19 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
 from vault import VaultConfig, VaultService
+import logging
+
+# Enable debug logging for authlib
+# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(Levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("app_new.log"), # Save logs to app_new.log
+        logging.StreamHandler(), # Also print logs to console
+    ],
+)
+logger = logging.getLogger("authlib")
 
 # Add the parent directory to sys.path to make backend importable
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,7 +57,7 @@ openai_embedding_model = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embeddin
 openai_lang_model = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-2024-05-13-tpm")
 
 search_service = "https://nt03-eastus-km-search-9893.search.windows.net"
-search_index_name = "gptentern01index"
+search_index_name = "gptenterprise03index"
 msi = DefaultAzureCredential()
 
 # Vault configuration
@@ -64,8 +77,8 @@ if current_environment in ["local", "test"]:
             "RELATIVEPATH", "/grc"
         )
 
-OIDC_CLIENT_ID = vault_service.get_secret("OIDC_CLIENT_ID", path)
-OIDC_CLIENT_SECRET = vault_service.get_secret("OIDC_CLIENT_SECRET", path)
+OIDC_CLIENT_ID = "20e08190-785c841eb1c9"
+OIDC_CLIENT_SECRET = "e3qqGuCFd1HDjwHC4TiYhHt"
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
 OIDC_CALLBACK_URL = "https://kme03.dev.com/sso"
 
@@ -95,7 +108,7 @@ app.add_middleware(
 )
 
 # Initialize OpenAI client with token provider
-client = AzureOpenAI(
+client = openai.AynscAzureOpenAI(
     azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
     api_version=openai_api_version,
     azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
@@ -190,6 +203,8 @@ async def auth_callback(request: Request):
         # Verify state parameter for CSRF protection
         received_state = request.query_params.get("state")
         stored_state = request.session.get("oauth_state")
+        logger.debug(f"Received state value: {received_state}")
+        logger.debug(f"Stored state value: {stored_state}")
         
         if not received_state or received_state != stored_state:
             print(f"State mismatch: received={received_state}, stored={stored_state}")
@@ -204,6 +219,8 @@ async def auth_callback(request: Request):
         # Exchange code for token
         token = await oauth.oidc.authorize_access_token(request)
         user_info = token.get("userinfo")
+        logger.debug(f"Token received value is: {token}")
+        logger.debug(f"User inforamtion accessing is: {user_info}")
         
         print(f"Token received: {token}")
         print(f"User info: {user_info}")
@@ -211,14 +228,16 @@ async def auth_callback(request: Request):
         if user_info:
             # Extract user groups from the token
             user_groups = user_info.get("DD_Custom_memberOf", [])
+            logger.debug(f"User Groups captured is: {user_groups}")
             
             # Check if user is in allowed groups
-            allowed_group = "TKMAI_ENT03_RO"
+            allowed_group = "TKMAI_KME03_RO"
             
             # Handle both string and list formats
             if isinstance(user_groups, str):
                 user_groups = [user_groups]
-            
+                
+            logger.debug(f"Allowed groups captured is: {allowed_group}")
             print(f"User groups: {user_groups}, Allowed: {allowed_group}")
             
             if allowed_group in user_groups:
@@ -229,6 +248,7 @@ async def auth_callback(request: Request):
                     "name": user_info.get("name", user_info.get("preferred_username", "User")),
                     "groups": user_groups
                 }
+                logger.debug(f"User has been autheticated successfully: {request.session['user']}")
                 print(f"User authenticated successfully: {request.session['user']}")
                 # Redirect to frontend SSO callback handler
                 return RedirectResponse(url="/sso/callback")
@@ -259,6 +279,7 @@ async def logout(request: Request):
 @app.get("/api/auth/status")
 async def auth_status(request: Request):
     user = request.session.get("user")
+    logger.debug(f"API Auth status accessed by user: {user}")
     if user:
         return {
             "isAuthenticated": True,
@@ -275,6 +296,7 @@ async def auth_status(request: Request):
 @app.get("/protected")
 async def protected_route(request: Request):
     user = request.session.get("user")
+    logger.debug(f"Protected route accessed by user: {user}")
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -594,20 +616,13 @@ async def upload_file(
         print(f"Error in file upload: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
-# Static file serving
-app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+static_path = os.path.join(os.path.dirname(__file__), "dist")
 
-
-# Catch-all route for frontend
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    if full_path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="API endpoint not found")
-    
-    # For all frontend routes, serve the React app
-    return FileResponse("dist/index.html")
+# Mount the static files if the directory exists
+if os.path.exists(static_path):
+    app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=port, log_level="debug", reload=True)
