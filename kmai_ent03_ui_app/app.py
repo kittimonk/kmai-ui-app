@@ -81,12 +81,17 @@ OIDC_CLIENT_ID = "20e08190-785c841eb1c9"
 OIDC_CLIENT_SECRET = "e3qqGuCFd1HDjwHC4TiYhHt"
 OIDC_AUTHORITY = "https://fedsit.rastest.ca"
 
-# Dynamically set callback URL based on the request host
+# Use consistent callback URL for PingFed configuration
 def get_callback_url(request: Request) -> str:
-    """Generate callback URL based on request host"""
+    """Generate callback URL - always use configured custom domain for production"""
     host = request.headers.get("host", "localhost:8000")
-    scheme = "https" if "azurewebsites.net" in host or "kme03.dev.com" in host else "http"
-    return f"{scheme}://{host}/sso"
+    
+    # For production deployments, always use the custom domain configured in PingFed
+    if "azurewebsites.net" in host or "kme03.dev.com" in host:
+        return "https://kme03.dev.com/sso"
+    else:
+        # For local development
+        return "http://localhost:8000/sso"
 
 # OAuth configuration
 oauth = OAuth()
