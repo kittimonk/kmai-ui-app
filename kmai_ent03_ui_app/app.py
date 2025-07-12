@@ -33,7 +33,7 @@ import logging
 # logging.basicConfig(level=logging.DEBUG)
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(Levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler("app_new.log"), # Save logs to app_new.log
         logging.StreamHandler(), # Also print logs to console
@@ -108,28 +108,15 @@ oauth.register(
 # Initialize FastAPI app
 app = FastAPI(debug=True)
 
-# Add CORS middleware
+# Add SessionMiddleware
+secure_random_key = secrets.token_hex(32)
+print(f"Starting app with session secret key length: {len(secure_random_key)}")
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
-
-# Initialize OpenAI client with token provider
-client = openai.AsyncAzureOpenAI(
-    azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
-    api_version=openai_api_version,
-    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
-)
-
-# Initialize search client
-search_client = SearchClient(
-    endpoint=search_service,
-    index_name=search_index_name,
-    credential=msi,
+    SessionMiddleware,
+    secret_key=secure_random_key,
+    max_age=14 * 24 * 3600,
+    https_only=True,  # Set to False for development/http, True for production/https
+    same_site="None"
 )
 
 # Session middleware to check authentication for API endpoints only
@@ -172,15 +159,28 @@ async def session_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-# Add SessionMiddleware
-secure_random_key = secrets.token_hex(32)
-print(f"Starting app with session secret key length: {len(secure_random_key)}")
+# Add CORS middleware
 app.add_middleware(
-    SessionMiddleware,
-    secret_key=secure_random_key,
-    max_age=14 * 24 * 3600,
-    https_only=False,  # Set to False for development/http, True for production/https
-    same_site="lax"
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
+
+# Initialize OpenAI client with token provider
+client = openai.AsyncAzureOpenAI(
+    azure_endpoint=f"https://{openai_account_name}.openai.azure.com",
+    api_version=openai_api_version,
+    azure_ad_token_provider=get_bearer_token_provider(msi, "https://cognitiveservices.azure.com/.default")
+)
+
+# Initialize search client
+search_client = SearchClient(
+    endpoint=search_service,
+    index_name=search_index_name,
+    credential=msi,
 )
 
 # Function to get token for OpenAI
@@ -205,6 +205,7 @@ async def sso_login(request: Request):
     # Generate a secure state parameter for CSRF protection
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
+    logger.debug(f"Stored generated state value: {request.session["oauth_state"]}")
     
     # Dynamically generate callback URL based on current request
     redirect_uri = get_callback_url(request)
