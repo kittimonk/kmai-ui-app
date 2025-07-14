@@ -109,11 +109,11 @@ oauth.register(
 app = FastAPI(debug=True)
 
 # Add SessionMiddleware
-secure_random_key = secrets.token_hex(32)
+SESSION_SECRET = os.getenv("SESSION_SECRET", secrets.token_hex(32))
 print(f"Starting app with session secret key length: {len(secure_random_key)}")
 app.add_middleware(
     SessionMiddleware,
-    secret_key=secure_random_key,
+    secret_key=SESSION_SECRET,
     max_age=14 * 24 * 3600,
     https_only=True,  # Set to False for development/http, True for production/https
     same_site="None"
