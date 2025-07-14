@@ -244,7 +244,7 @@ async def auth_callback(request: Request):
         
         if user_info:
             # Extract user groups from the token
-            user_groups = user_info.get("DD_Custom_memberOf", [])
+            user_groups = user_info.get("DD_memberOf", [])
             logger.debug(f"User Groups captured is: {user_groups}")
             
             # Check if user is in allowed groups
