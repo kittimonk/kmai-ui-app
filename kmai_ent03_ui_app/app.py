@@ -105,12 +105,24 @@ oauth.register(
     },
 )
 
+def get_session_secret():
+    try:
+        with open(".session_secret", "r") as f:
+            return f.read().strip()
+    except Exception:
+        secret = secrets.token_hex(32)
+        with open(".session_secret", "w") as f:
+            f.write(secret)
+        return secret
+
+SESSION_SECRET = os.environ.get("SESSION_SECRET", get_session_secret())
+
 # Initialize FastAPI app
 app = FastAPI(debug=True)
 
 # Add SessionMiddleware
-SESSION_SECRET = os.getenv("SESSION_SECRET", secrets.token_hex(32))
-print(f"Starting app with session secret key length: {len(secure_random_key)}")
+# SESSION_SECRET = os.getenv("SESSION_SECRET", secrets.token_hex(32))
+print(f"Starting app with session secret key length: {len(SESSION_SECRET)}")
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
