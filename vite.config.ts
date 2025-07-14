@@ -23,7 +23,7 @@ if (typeof react !== 'function') {
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
-    port: 8080,
+    port: 8000,
   },
   plugins: [
     // Only add react plugin if it's available
