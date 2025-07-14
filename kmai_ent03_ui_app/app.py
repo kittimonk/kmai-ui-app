@@ -217,7 +217,7 @@ async def sso_login(request: Request):
     # Generate a secure state parameter for CSRF protection
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
-    logger.debug(f"Stored generated state value: {request.session["oauth_state"]}")
+    logger.debug(f"Stored generated state value: {request.session['oauth_state']}")
     
     # Dynamically generate callback URL based on current request
     redirect_uri = get_callback_url(request)
