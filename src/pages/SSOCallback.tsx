@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/services/auth';
 
 const SSOCallback = () => {
   const [status, setStatus] = useState('Authenticating...');
   const navigate = useNavigate();
+  const location = useLocation();
   const { setUser } = useAuthStore();
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    // If refresh=1, force a full reload to ensure session cookie is available
+    if (params.get('refresh') === '1') {
+      setStatus('Finalizing authentication...');
+      window.location.replace('/');
+      return;
+    }
+
     const handleCallback = async () => {
       try {
         // Check if user is authenticated after SSO redirect
@@ -43,7 +52,7 @@ const SSOCallback = () => {
     };
 
     handleCallback();
-  }, [navigate, setUser]);
+  }, [navigate, setUser, location]);
 
   return (
     <div className="flex items-center justify-center min-h-screen">
