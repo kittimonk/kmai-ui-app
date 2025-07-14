@@ -280,7 +280,7 @@ async def auth_callback(request: Request):
                 logger.debug(f"User has been authenticated successfully: {request.session['user']}")
                 print(f"User authenticated successfully: {request.session['user']}")
                 # Redirect to frontend SSO callback handler
-                return RedirectResponse(url="/sso/callback")
+                return RedirectResponse(url="/sso/callback?refresh=1")
             else:
                 print(f"Access denied: User groups {user_groups} not in allowed group {allowed_group}")
                 return JSONResponse(
