@@ -685,18 +685,28 @@ async def upload_file(
 #if os.path.exists(static_path):
 #    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
+import os
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+app = FastAPI()
+
 static_path = os.path.join(os.path.dirname(__file__), "dist")
+static_dir = os.path.join(static_path, "static")
+
+# Mount static files
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/{full_path:path}")
 async def serve_spa(request: Request, full_path: str):
-    # Let FastAPI handle explicit backend routes (APIs, auth, SSO, etc.)
     backend_prefixes = (
         "api/", "auth/", "sso", "logout", "protected", "converter", "explainer", 
         "remediation", "ingestion", "knowledge", "health", "docs", "openapi", "static"
     )
     if full_path.startswith(backend_prefixes):
         raise HTTPException(status_code=404, detail="Not found")
-    # Otherwise, serve index.html for the SPA
     index_path = os.path.join(static_path, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
