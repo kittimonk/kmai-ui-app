@@ -645,45 +645,62 @@ async def upload_file(
         print(f"Error in file upload: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
-static_path = os.path.join(os.path.dirname(__file__), "dist")
+#static_path = os.path.join(os.path.dirname(__file__), "dist")
 
 # Serve static files and handle SPA routing
-@app.get("/{full_path:path}")
-async def serve_static_files(request: Request, full_path: str):
-    """Serve static files and handle SPA routing"""
+#@app.get("/{full_path:path}")
+#async def serve_static_files(request: Request, full_path: str):
+#    """Serve static files and handle SPA routing"""
     # Skip for API routes and auth routes that are already handled
-    if (full_path.startswith("api/") or 
-        full_path.startswith("chat") or 
-        full_path.startswith("auth/") or 
-        full_path.startswith("logout") or 
-        full_path.startswith("sso") or 
-        full_path.startswith("protected") or
-        full_path.startswith("converter") or
-        full_path.startswith("explainer") or
-        full_path.startswith("remediation") or
-        full_path.startswith("ingestion") or
-        full_path.startswith("knowledge") or
-        full_path.startswith("health") or
-        full_path.startswith("docs") or
-        full_path.startswith("openapi")):
-        raise HTTPException(status_code=404, detail="Not found")
+#    if (full_path.startswith("api/") or 
+#        full_path.startswith("chat") or 
+#        full_path.startswith("auth/") or 
+#        full_path.startswith("logout") or 
+#        full_path.startswith("sso") or 
+#        full_path.startswith("protected") or
+#        full_path.startswith("converter") or
+#        full_path.startswith("explainer") or
+#        full_path.startswith("remediation") or
+#        full_path.startswith("ingestion") or
+#        full_path.startswith("knowledge") or
+#        full_path.startswith("health") or
+#        full_path.startswith("docs") or
+#        full_path.startswith("openapi")):
+#        raise HTTPException(status_code=404, detail="Not found")
     
     # Try to serve the requested file
-    file_path = os.path.join(static_path, full_path)
+#    file_path = os.path.join(static_path, full_path)
     
     # If it's a directory or doesn't exist, serve index.html for SPA routing
-    if not os.path.exists(file_path) or os.path.isdir(file_path):
-        index_path = os.path.join(static_path, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        else:
-            raise HTTPException(status_code=404, detail="Static files not found")
+ #   if not os.path.exists(file_path) or os.path.isdir(file_path):
+ #       index_path = os.path.join(static_path, "index.html")
+ #       if os.path.exists(index_path):
+ #           return FileResponse(index_path)
+ #       else:
+#            raise HTTPException(status_code=404, detail="Static files not found")
     
-    return FileResponse(file_path)
+ #   return FileResponse(file_path)
 
 # Alternative: Mount static files if the directory exists
-if os.path.exists(static_path):
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
+#if os.path.exists(static_path):
+#    app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+static_path = os.path.join(os.path.dirname(__file__), "dist")
+
+@app.get("/{full_path:path}")
+async def serve_spa(request: Request, full_path: str):
+    # Let FastAPI handle explicit backend routes (APIs, auth, SSO, etc.)
+    backend_prefixes = (
+        "api/", "auth/", "sso", "logout", "protected", "converter", "explainer", 
+        "remediation", "ingestion", "knowledge", "health", "docs", "openapi", "static"
+    )
+    if full_path.startswith(backend_prefixes):
+        raise HTTPException(status_code=404, detail="Not found")
+    # Otherwise, serve index.html for the SPA
+    index_path = os.path.join(static_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="Static files not found")
 
 if __name__ == "__main__":
     import uvicorn
